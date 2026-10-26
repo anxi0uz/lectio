@@ -1,0 +1,434 @@
+import {
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  FileText,
+  Globe,
+  Heart,
+  Link2,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+
+import {
+  isProcessing,
+  isSearchable,
+  saveProgress,
+  useBookmarkActions,
+  useCourse,
+  useEnrollment,
+  useLecture,
+  useLectureActions,
+  useLectureState,
+  useSegments,
+  useSummary,
+  useToggleFavorite,
+  useUser,
+} from '../../api/hooks';
+import type { SearchHit } from '../../api/types';
+import { useAuth } from '../../auth/AuthProvider';
+import { Avatar, Empty, Skeleton, useToast } from '../../components/ui';
+import { duration, fullName, timecode } from '../../lib/format';
+import { ChatPanel } from './ChatPanel';
+import { CourseContent } from './CourseContent';
+import { Player } from './Player';
+import { ProcessingCard } from './ProcessingCard';
+import { BookmarksTab, ChaptersTab, SummaryTab, TermsTab, TranscriptTab } from './Tabs';
+import { TranscriptPanel } from './TranscriptPanel';
+
+type Tab = 'summary' | 'chapters' | 'terms' | 'transcript' | 'notes';
+
+const PROGRESS_SAVE_MS = 10_000;
+const LANGUAGES: Record<string, string> = { ru: 'Русский', en: 'English' };
+
+export function LecturePage() {
+  const { id = '' } = useParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { user } = useAuth();
+
+  const lectureQuery = useLecture(id);
+  const lecture = lectureQuery.data;
+  const { data: segments = [] } = useSegments(lecture);
+  const { data: summary } = useSummary(lecture);
+  const { data: state } = useLectureState(id);
+  const { data: course } = useCourse(lecture?.course_id);
+  const { data: owner } = useUser(lecture?.owner_id);
+  const actions = useLectureActions(id);
+  const favorite = useToggleFavorite(id);
+  const bookmarks = useBookmarkActions(id);
+  const enrollment = useEnrollment(lecture?.course_id ?? '');
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [time, setTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [tab, setTab] = useState<Tab>('summary');
+  const resumed = useRef(false);
+
+  const canManage = state?.can_manage ?? false;
+  const chapters = summary?.chapters ?? [];
+  const terms = summary?.key_terms ?? [];
+  const lectureBookmarks = state?.bookmarks ?? [];
+
+  const seek = useCallback((seconds: number, play = true) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.currentTime = seconds;
+    setTime(seconds);
+    if (play) void video.play();
+    video.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, []);
+
+  // Jump to ?t= from search results, otherwise resume where the user left.
+  const onLoaded = useCallback(() => {
+    if (resumed.current) return;
+    resumed.current = true;
+
+    const fromUrl = params.get('t');
+    if (fromUrl !== null) {
+      seek(Number(fromUrl), false);
+      return;
+    }
+
+    const position = state?.progress.position_seconds ?? 0;
+    if (position > 5 && !state?.progress.completed) {
+      seek(position, false);
+      toast(`Продолжаем с ${timecode(position)}`);
+    }
+  }, [params, seek, state, toast]);
+
+  useEffect(() => {
+    resumed.current = false;
+    setTime(0);
+    setTab('summary');
+  }, [id]);
+
+  // A later ?t= (e.g. a citation link to the same lecture) seeks directly.
+  useEffect(() => {
+    const t = params.get('t');
+    if (t !== null && resumed.current && videoRef.current) seek(Number(t));
+  }, [params, seek]);
+
+  // Save the position while playing and when leaving the page.
+  useEffect(() => {
+    if (!user || !lecture?.video_url) return;
+
+    const save = () => {
+      const video = videoRef.current;
+      if (video && video.currentTime > 1) {
+        void saveProgress(id, video.currentTime).catch(() => undefined);
+      }
+    };
+
+    const interval = playing ? window.setInterval(save, PROGRESS_SAVE_MS) : undefined;
+    if (!playing) save();
+
+    return () => {
+      window.clearInterval(interval);
+      if (playing) save();
+    };
+  }, [playing, user, id, lecture?.video_url]);
+
+  const openSource = useCallback(
+    (hit: SearchHit) => {
+      if (hit.lecture_id === id) seek(hit.start_seconds);
+      else navigate(`/lectures/${hit.lecture_id}?t=${Math.floor(hit.start_seconds)}`);
+    },
+    [id, navigate, seek],
+  );
+
+  const addBookmark = useCallback(() => {
+    if (!user) {
+      toast('Войдите, чтобы ставить закладки', { error: true });
+      return;
+    }
+
+    bookmarks.create.mutate(
+      { position_seconds: Math.floor(videoRef.current?.currentTime ?? 0) },
+      {
+        onSuccess: (bookmark) => toast(`Закладка на ${timecode(bookmark.position_seconds)}`),
+        onError: (error) => toast(error.message, { error: true }),
+      },
+    );
+  }, [user, bookmarks.create, toast]);
+
+  const tabs = useMemo(
+    () =>
+      [
+        { key: 'summary', label: 'Конспект' },
+        { key: 'chapters', label: 'Оглавление', count: chapters.length },
+        { key: 'terms', label: 'Термины', count: terms.length },
+        { key: 'transcript', label: 'Расшифровка' },
+        { key: 'notes', label: 'Мои заметки', count: lectureBookmarks.length },
+      ] as { key: Tab; label: string; count?: number }[],
+    [chapters.length, terms.length, lectureBookmarks.length],
+  );
+
+  if (lectureQuery.isError) {
+    return (
+      <div className="card">
+        <Empty
+          icon={<FileText size={22} />}
+          title="Лекция не найдена"
+          action={
+            <Link to="/lectures" className="btn btn-sm">
+              Ко всем лекциям
+            </Link>
+          }
+        >
+          Возможно, её удалили или ссылка неверная.
+        </Empty>
+      </div>
+    );
+  }
+
+  if (!lecture) {
+    return (
+      <div className="page">
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Skeleton width={220} height={14} />
+          <Skeleton width="60%" height={30} />
+        </div>
+        <div className="card lecture-layout">
+          <div className="lecture-main">
+            <Skeleton height={420} />
+          </div>
+          <div className="lecture-aside">
+            <Skeleton height={200} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const searchable = isSearchable(lecture);
+  const processing = isProcessing(lecture);
+
+  const share = async () => {
+    const url = new URL(`/lectures/${id}`, window.location.origin);
+    if (time > 1) url.searchParams.set('t', String(Math.floor(time)));
+    await navigator.clipboard.writeText(url.toString());
+    toast(time > 1 ? `Ссылка на момент ${timecode(time)} скопирована` : 'Ссылка скопирована');
+  };
+
+  return (
+    <div className="page">
+      <section className="card page-header" style={{ alignItems: 'center' }}>
+        <div style={{ minWidth: 0 }}>
+          <nav className="breadcrumbs">
+            {course ? (
+              <>
+                <Link to="/courses">Курсы</Link>
+                <ChevronRight size={14} />
+                <Link to={`/courses/${course.id}`}>{course.title}</Link>
+              </>
+            ) : (
+              <Link to="/lectures">Все лекции</Link>
+            )}
+            <ChevronRight size={14} />
+            <span className="current">Лекция</span>
+          </nav>
+          <h1>{lecture.title}</h1>
+          <div className="meta-row">
+            <span>
+              <Clock size={15} /> {duration(lecture.duration_seconds)}
+            </span>
+            {course && (
+              <span>
+                <BookOpen size={15} /> {course.title}
+              </span>
+            )}
+            {lecture.language && (
+              <span>
+                <Globe size={15} /> {LANGUAGES[lecture.language] ?? lecture.language}
+              </span>
+            )}
+            {chapters.length > 0 && <span>{chapters.length} разделов</span>}
+            {state?.progress.completed && (
+              <span style={{ color: 'var(--success)' }}>
+                <CheckCircle2 size={15} /> Просмотрено
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {course && user && !state?.is_enrolled_in_course && (
+            <button className="btn" onClick={() => enrollment.enroll.mutate()} disabled={enrollment.enroll.isPending}>
+              Записаться на курс
+            </button>
+          )}
+          {course && state?.is_enrolled_in_course && (
+            <span className="badge badge-success" style={{ height: 40, padding: '0 14px' }}>
+              <CheckCircle2 size={14} /> Вы записаны на курс
+            </span>
+          )}
+          {user && (
+            <button
+              className={`btn btn-icon${state?.is_favorite ? ' btn-active' : ''}`}
+              aria-label="Избранное"
+              title={state?.is_favorite ? 'Убрать из избранного' : 'В избранное'}
+              onClick={() => favorite.mutate(!state?.is_favorite)}
+            >
+              <Heart size={18} fill={state?.is_favorite ? 'currentColor' : 'none'} />
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={share}>
+            <Link2 size={16} /> Поделиться
+          </button>
+        </div>
+      </section>
+
+      {(processing || lecture.status === 'failed') && (
+        <ProcessingCard
+          lecture={lecture}
+          canManage={canManage}
+          onRetry={() => actions.reprocess.mutate()}
+          retrying={actions.reprocess.isPending}
+        />
+      )}
+
+      <section className="card lecture-layout">
+        <div className="lecture-main">
+          <Player
+            videoRef={videoRef}
+            src={lecture.video_url}
+            title={lecture.title}
+            duration={lecture.duration_seconds}
+            segments={segments}
+            chapterStarts={chapters.map((c) => c.start_seconds)}
+            bookmarkMarks={lectureBookmarks.map((b) => b.position_seconds)}
+            time={time}
+            onTime={setTime}
+            onPlayingChange={setPlaying}
+            onLoaded={onLoaded}
+            onBookmark={addBookmark}
+            placeholder={
+              <>
+                <b>Видео скачивается</b>
+                <span style={{ fontSize: 14, opacity: 0.7 }}>Оно появится здесь, как только загрузка завершится</span>
+              </>
+            }
+          />
+
+          <div className="tabs" role="tablist">
+            {tabs.map((item) => (
+              <button
+                key={item.key}
+                role="tab"
+                aria-selected={tab === item.key}
+                className={`tab${tab === item.key ? ' active' : ''}`}
+                onClick={() => setTab(item.key)}
+              >
+                {item.label}
+                {!!item.count && <span className="tab-count">{item.count}</span>}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            {tab === 'summary' && (
+              <SummaryTab
+                summary={summary}
+                processing={processing}
+                canManage={canManage}
+                onRegenerate={() =>
+                  actions.resummarize.mutate(undefined, {
+                    onSuccess: () => toast('Конспект поставлен в очередь'),
+                    onError: (error) => toast(error.message, { error: true }),
+                  })
+                }
+                regenerating={actions.resummarize.isPending}
+              />
+            )}
+            {tab === 'chapters' && <ChaptersTab chapters={chapters} time={time} onSeek={seek} />}
+            {tab === 'terms' && <TermsTab terms={terms} onSeek={seek} />}
+            {tab === 'transcript' && (
+              <TranscriptTab lectureId={id} segments={segments} time={time} onSeek={seek} />
+            )}
+            {tab === 'notes' && (
+              <BookmarksTab
+                lectureId={id}
+                bookmarks={lectureBookmarks}
+                time={time}
+                signedIn={!!user}
+                onSeek={seek}
+              />
+            )}
+          </div>
+
+          {owner && (
+            <div className="list-item" style={{ border: '1px solid var(--border)', padding: 14 }}>
+              <Avatar user={owner} size={40} />
+              <div>
+                <div style={{ fontWeight: 600 }}>{fullName(owner)}</div>
+                <div className="muted" style={{ fontSize: 13 }}>Преподаватель</div>
+              </div>
+            </div>
+          )}
+
+          {canManage && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-sm"
+                disabled={!searchable || actions.resummarize.isPending}
+                onClick={() =>
+                  actions.resummarize.mutate(undefined, {
+                    onSuccess: () => toast('Конспект поставлен в очередь'),
+                    onError: (error) => toast(error.message, { error: true }),
+                  })
+                }
+              >
+                <FileText size={14} /> Пересобрать конспект
+              </button>
+              <button
+                className="btn btn-sm"
+                disabled={processing || actions.reprocess.isPending}
+                onClick={() => actions.reprocess.mutate()}
+              >
+                <RefreshCw size={14} /> Обработать заново
+              </button>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  if (!window.confirm('Удалить лекцию вместе с видео и расшифровкой?')) return;
+                  actions.remove.mutate(undefined, {
+                    onSuccess: () => {
+                      toast('Лекция удалена');
+                      navigate('/lectures');
+                    },
+                  });
+                }}
+              >
+                <Trash2 size={14} /> Удалить
+              </button>
+            </div>
+          )}
+        </div>
+
+        <aside className="lecture-aside">
+          <div className="panel">
+            <div className="panel-head">
+              <h3>Расшифровка</h3>
+              {playing && (
+                <span className="badge badge-brand">
+                  <span className="dot dot-pulse" /> синхронно с видео
+                </span>
+              )}
+            </div>
+            <TranscriptPanel segments={segments} time={time} onSeek={seek} maxHeight={360} />
+          </div>
+
+          <ChatPanel lectureId={id} enabled={searchable} onOpenSource={openSource} />
+
+          {course && <CourseContent course={course} currentId={id} />}
+        </aside>
+      </section>
+    </div>
+  );
+}
