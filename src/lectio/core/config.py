@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     storage_dir: Path = Path("storage")
     max_upload_mb: int = 4096
+    max_duration_hours: float = 4.0
+    url_probe_timeout_seconds: float = 30.0
     max_avatar_mb: int = 5
     download_max_height: int = 720
 

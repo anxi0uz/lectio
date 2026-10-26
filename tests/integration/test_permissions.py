@@ -2,11 +2,14 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.support import RegisteredUser, RegisterUser, create_processed_lecture
+from tests.support import (
+    RegisteredUser,
+    RegisterUser,
+    create_processed_lecture,
+    sample_media,
+)
 
 pytestmark = pytest.mark.anyio
-
-VIDEO = ("lecture.mp4", b"\x00" * 1024, "video/mp4")
 
 
 async def test_students_cannot_create_content(
@@ -16,7 +19,7 @@ async def test_students_cannot_create_content(
     upload = await client.post(
         "/api/v1/lectures",
         headers=student.headers,
-        files={"file": VIDEO},
+        files={"file": ("lecture.mp4", sample_media("video"), "video/mp4")},
     )
     imported = await client.post(
         "/api/v1/lectures/import",
@@ -30,7 +33,7 @@ async def test_students_cannot_create_content(
     )
     anonymous = await client.post(
         "/api/v1/lectures",
-        files={"file": VIDEO},
+        files={"file": ("lecture.mp4", sample_media("video"), "video/mp4")},
     )
 
     assert upload.status_code == 403
@@ -59,7 +62,7 @@ async def test_only_owner_manages_lecture_and_course(
         await client.post(
             "/api/v1/lectures",
             headers=teacher.headers,
-            files={"file": VIDEO},
+            files={"file": ("lecture.mp4", sample_media("video"), "video/mp4")},
         )
     ).json()
     lecture_url = f"/api/v1/lectures/{lecture['id']}"
@@ -76,7 +79,7 @@ async def test_only_owner_manages_lecture_and_course(
     foreign_course = await client.post(
         "/api/v1/lectures",
         headers=other_teacher.headers,
-        files={"file": VIDEO},
+        files={"file": ("lecture.mp4", sample_media("video"), "video/mp4")},
         data={"course_id": course["id"]},
     )
     foreign_course_delete = await client.delete(

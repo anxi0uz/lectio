@@ -9,6 +9,8 @@ class DomainError(Exception):
 
     status_code: ClassVar[int] = status.HTTP_400_BAD_REQUEST
     default_detail: ClassVar[str] = "Bad request"
+    # Stable machine-readable reason, for clients that show their own text.
+    code: ClassVar[str | None] = None
 
     def __init__(
         self,

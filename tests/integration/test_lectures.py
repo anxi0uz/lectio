@@ -1,15 +1,14 @@
 from uuid import UUID
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 from redis.asyncio import Redis
 
+from lectio.core.config import get_settings
 from lectio.core.jobs import JOBS_QUEUE_KEY, Job, JobKind
-from tests.support import RegisteredUser
+from tests.support import RegisteredUser, sample_media
 
 pytestmark = pytest.mark.anyio
-
-VIDEO_BYTES = bytes(range(256)) * 16
 
 
 async def _queued_jobs(redis: Redis) -> list[Job]:
@@ -26,7 +25,7 @@ async def test_upload_queues_processing_and_serves_video(
     response = await client.post(
         "/api/v1/lectures",
         headers=teacher.headers,
-        files={"file": ("intro.mp4", VIDEO_BYTES, "video/mp4")},
+        files={"file": ("intro.mp4", sample_media("video"), "video/mp4")},
         data={"title": "  Введение  "},
     )
 
@@ -52,10 +51,13 @@ async def test_upload_queues_processing_and_serves_video(
 
     assert full.status_code == 200
     assert full.headers["content-type"] == "video/mp4"
-    assert full.content == VIDEO_BYTES
+    assert full.content == sample_media("video")
     assert partial.status_code == 206
-    assert partial.headers["content-range"] == f"bytes 100-199/{len(VIDEO_BYTES)}"
-    assert partial.content == VIDEO_BYTES[100:200]
+    assert (
+        partial.headers["content-range"]
+        == f"bytes 100-199/{len(sample_media('video'))}"
+    )
+    assert partial.content == sample_media("video")[100:200]
 
 
 async def test_upload_validation(
@@ -75,7 +77,7 @@ async def test_upload_validation(
     missing_course = await client.post(
         "/api/v1/lectures",
         headers=teacher.headers,
-        files={"file": ("a.mp4", VIDEO_BYTES, "video/mp4")},
+        files={"file": ("a.mp4", sample_media("video"), "video/mp4")},
         data={"course_id": "00000000-0000-0000-0000-000000000000"},
     )
     listed = await client.get("/api/v1/lectures")
@@ -85,6 +87,64 @@ async def test_upload_validation(
     assert missing_course.status_code == 404
     assert missing_course.json()["detail"] == "Course not found"
     assert listed.json() == []
+
+
+async def test_upload_checks_media_content(
+    client: AsyncClient,
+    teacher: RegisteredUser,
+    test_redis: Redis,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def upload(name: str, content: bytes) -> Response:
+        return await client.post(
+            "/api/v1/lectures",
+            headers=teacher.headers,
+            files={"file": (name, content, "application/octet-stream")},
+        )
+
+    garbage = await upload("lecture.mp4", b"not a video at all" * 100)
+    silent = await upload("silent.mp4", sample_media("silent"))
+    audio = await upload("podcast.wav", sample_media("audio"))
+
+    assert garbage.status_code == 422
+    assert garbage.json()["code"] == "media_unreadable"
+    assert silent.status_code == 422
+    assert silent.json()["code"] == "media_no_audio"
+    assert audio.status_code == 202
+    assert audio.json()["duration_seconds"] == pytest.approx(2.0, abs=0.1)
+
+    monkeypatch.setattr(get_settings(), "max_duration_hours", 1 / 3600)
+    too_long = await upload("long.mp4", sample_media("video"))
+    listed = await client.get("/api/v1/lectures")
+
+    assert too_long.status_code == 422
+    assert too_long.json()["code"] == "media_too_long"
+    # Rejected uploads leave neither rows nor queued jobs behind.
+    assert [item["title"] for item in listed.json()] == ["podcast"]
+    assert len(await _queued_jobs(test_redis)) == 1
+
+
+async def test_import_checks_the_page(
+    client: AsyncClient,
+    teacher: RegisteredUser,
+) -> None:
+    async def import_url(url: str) -> Response:
+        return await client.post(
+            "/api/v1/lectures/import",
+            headers=teacher.headers,
+            json={"url": url, "title": "Своё название"},
+        )
+
+    missing = await import_url("https://example.com/missing")
+    live = await import_url("https://example.com/live")
+    too_long = await import_url("https://example.com/long")
+    named = await import_url("https://example.com/video")
+
+    assert missing.status_code == 422
+    assert missing.json()["code"] == "url_unavailable"
+    assert live.json()["code"] == "url_live_stream"
+    assert too_long.json()["code"] == "media_too_long"
+    assert named.json()["title"] == "Своё название"
 
 
 async def test_import_by_url(
@@ -110,6 +170,9 @@ async def test_import_by_url(
 
     assert lecture["source_type"] == "url"
     assert lecture["source_url"] == "https://www.youtube.com/watch?v=abc"
+    # Known before downloading: the page is checked when the lecture is created.
+    assert lecture["title"] == "Видео со страницы"
+    assert lecture["duration_seconds"] == 600
     assert lecture["video_url"] is None
     assert len(await _queued_jobs(test_redis)) == 1
 
@@ -135,7 +198,7 @@ async def test_lecture_crud_and_reprocess(
         await client.post(
             "/api/v1/lectures",
             headers=teacher.headers,
-            files={"file": ("one.webm", VIDEO_BYTES, "video/webm")},
+            files={"file": ("one.webm", sample_media("video"), "video/webm")},
         )
     ).json()
     lecture_url = f"/api/v1/lectures/{lecture['id']}"
@@ -188,7 +251,7 @@ async def test_deleting_course_keeps_lectures(
         await client.post(
             "/api/v1/lectures",
             headers=teacher.headers,
-            files={"file": ("a.mp4", VIDEO_BYTES, "video/mp4")},
+            files={"file": ("a.mp4", sample_media("video"), "video/mp4")},
             data={"course_id": course["id"]},
         )
     ).json()

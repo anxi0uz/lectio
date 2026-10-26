@@ -6,7 +6,9 @@ import anyio
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from lectio.core.exceptions import DomainError
 from lectio.core.jobs import JobKind, enqueue_job
+from lectio.core.media import probe_url
 from lectio.db.redis import close_redis, get_redis_client
 from lectio.db.session import dispose_engine, get_session_factory
 from lectio.models import Course, Lecture
@@ -67,7 +69,13 @@ async def seed(
                 print(f"skipped, not a URL: {url}")
                 continue
 
-            lectures.append(await create_imported_lecture(db, None, data))
+            try:
+                lecture = await create_imported_lecture(db, None, data, probe_url)
+            except DomainError as error:
+                print(f"skipped, {error.detail}: {url}")
+                continue
+
+            lectures.append(lecture)
 
         await db.commit()
 

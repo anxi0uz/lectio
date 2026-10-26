@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Depends,
     File,
     Form,
     Query,
@@ -14,6 +15,7 @@ from fastapi.responses import FileResponse
 
 from lectio.api.dependencies import RedisDep, SessionDep
 from lectio.core.jobs import JobKind, enqueue_job
+from lectio.core.media import probe_url
 from lectio.models.enums import LectureStatus
 from lectio.modules.auth.dependencies import CurrentUserDep, TeacherDep
 from lectio.modules.lectures.schemas import (
@@ -22,6 +24,7 @@ from lectio.modules.lectures.schemas import (
     LectureUpdate,
 )
 from lectio.modules.lectures.service import (
+    UrlProbe,
     create_imported_lecture,
     create_uploaded_lecture,
     delete_lecture,
@@ -36,6 +39,16 @@ router = APIRouter(
     prefix="/lectures",
     tags=["Lectures"],
 )
+
+
+def get_url_probe() -> UrlProbe:
+    return probe_url
+
+
+UrlProbeDep = Annotated[
+    UrlProbe,
+    Depends(get_url_probe),
+]
 
 # Jobs are enqueued as background tasks: they run after the request's
 # transaction is committed, so the worker always finds the lecture row.
@@ -81,11 +94,12 @@ async def upload_lecture_endpoint(
 async def import_lecture_endpoint(
     payload: LectureImport,
     teacher: TeacherDep,
+    probe: UrlProbeDep,
     db: SessionDep,
     redis: RedisDep,
     background_tasks: BackgroundTasks,
 ) -> LectureResponse:
-    lecture = await create_imported_lecture(db, teacher, payload)
+    lecture = await create_imported_lecture(db, teacher, payload, probe)
 
     background_tasks.add_task(
         enqueue_job,

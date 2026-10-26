@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,12 +6,11 @@ from typing import Any
 import structlog
 
 from lectio.core.config import get_settings
+from lectio.core.media import run_command
 
 log = structlog.get_logger(
     component="worker.media",
 )
-
-STDERR_TAIL_CHARS = 2000
 
 
 class MediaError(RuntimeError):
@@ -82,29 +80,12 @@ def download_video(
     )
 
 
-async def _run(*command: str) -> str:
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-
-    if process.returncode != 0:
-        raise MediaError(
-            f"{command[0]} failed: "
-            f"{stderr.decode(errors='replace')[-STDERR_TAIL_CHARS:]}",
-        )
-
-    return stdout.decode()
-
-
 async def extract_audio(
     video: Path,
     audio: Path,
 ) -> None:
     # 16 kHz mono PCM is what Whisper consumes internally.
-    await _run(
+    await run_command(
         "ffmpeg",
         "-nostdin",
         "-y",
@@ -121,21 +102,3 @@ async def extract_audio(
         "pcm_s16le",
         str(audio),
     )
-
-
-async def probe_duration(path: Path) -> float | None:
-    output = await _run(
-        "ffprobe",
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        str(path),
-    )
-
-    try:
-        return float(output.strip())
-    except ValueError:
-        return None

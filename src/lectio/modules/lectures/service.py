@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -9,6 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lectio.core.config import get_settings
+from lectio.core.media import (
+    MediaInfo,
+    RemoteVideo,
+    UrlProbeError,
+    probe_media,
+)
 from lectio.core.storage import (
     ensure_lecture_dir,
     remove_lecture_dir,
@@ -29,7 +36,12 @@ from lectio.modules.lectures.exceptions import (
     LectureBusyError,
     LectureNotFoundError,
     LectureNotReadyError,
+    LiveStreamError,
+    MediaTooLongError,
+    NoAudioError,
+    UnreadableMediaError,
     UnsupportedMediaError,
+    UrlUnavailableError,
     VideoNotAvailableError,
 )
 from lectio.modules.lectures.schemas import LectureImport, LectureUpdate
@@ -51,6 +63,8 @@ MEDIA_TYPES = {
 }
 
 UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+UrlProbe = Callable[[str], RemoteVideo]
 
 
 def media_type_for(path: Path) -> str:
@@ -74,6 +88,52 @@ async def save_upload(
                 )
 
             await file.write(chunk)
+
+
+def _ensure_duration_allowed(duration: float | None) -> None:
+    limit_hours = get_settings().max_duration_hours
+
+    if duration is not None and duration > limit_hours * 3600:
+        raise MediaTooLongError(
+            f"Recording is longer than {limit_hours:g} hours",
+        )
+
+
+async def validate_media_file(path: Path) -> MediaInfo:
+    """Reject files the pipeline would fail on, before they enter the queue."""
+    info = await probe_media(path)
+
+    if info is None:
+        raise UnreadableMediaError
+
+    if not info.has_audio:
+        raise NoAudioError
+
+    _ensure_duration_allowed(info.duration)
+
+    return info
+
+
+async def validate_url(url: str, probe: UrlProbe) -> RemoteVideo:
+    try:
+        remote = await asyncio.wait_for(
+            asyncio.to_thread(probe, url),
+            timeout=get_settings().url_probe_timeout_seconds,
+        )
+    except (UrlProbeError, TimeoutError) as error:
+        log.info(
+            "url_rejected",
+            url=url,
+            reason=str(error)[:300],
+        )
+        raise UrlUnavailableError from error
+
+    if remote.is_live:
+        raise LiveStreamError
+
+    _ensure_duration_allowed(remote.duration)
+
+    return remote
 
 
 async def _ensure_can_add_to_course(
@@ -111,6 +171,7 @@ async def create_uploaded_lecture(
 
     try:
         await save_upload(upload, destination)
+        info = await validate_media_file(destination)
     except BaseException:
         await asyncio.to_thread(remove_lecture_dir, lecture_id)
         raise
@@ -123,6 +184,7 @@ async def create_uploaded_lecture(
         source_type=SourceType.UPLOAD,
         video_path=to_media_path(destination),
         video_mime_type=MEDIA_TYPES[suffix],
+        duration_seconds=info.duration,
         status=LectureStatus.PENDING,
         progress=0.0,
     )
@@ -144,17 +206,19 @@ async def create_imported_lecture(
     db: AsyncSession,
     owner: User | None,
     data: LectureImport,
+    probe: UrlProbe,
 ) -> Lecture:
     if data.course_id is not None:
         await _ensure_can_add_to_course(db, data.course_id, owner)
 
     url = str(data.url)
+    remote = await validate_url(url, probe)
 
     lecture = Lecture(
         owner_id=owner.id if owner else None,
         course_id=data.course_id,
-        # The worker replaces it with the video title unless one was given.
-        title=data.title or url[:300],
+        title=(data.title or remote.title or url)[:300],
+        duration_seconds=remote.duration,
         source_type=SourceType.URL,
         source_url=url,
         status=LectureStatus.PENDING,

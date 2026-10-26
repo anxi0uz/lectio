@@ -10,6 +10,7 @@ from structlog.contextvars import bound_contextvars
 
 from lectio.core.config import get_settings
 from lectio.core.jobs import Job, JobKind
+from lectio.core.media import probe_media
 from lectio.core.storage import (
     AUDIO_FILENAME,
     ensure_lecture_dir,
@@ -31,7 +32,6 @@ from lectio.worker.media import (
     MediaError,
     download_video,
     extract_audio,
-    probe_duration,
 )
 
 log = structlog.get_logger(
@@ -169,9 +169,10 @@ async def process_lecture(lecture: Lecture) -> None:
     await extract_audio(video_path, audio_path)
 
     if lecture.duration_seconds is None:
+        info = await probe_media(video_path)
         await update_lecture(
             lecture.id,
-            duration_seconds=await probe_duration(video_path),
+            duration_seconds=info.duration if info else None,
         )
 
     await _transcribe(lecture.id, audio_path)

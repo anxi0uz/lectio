@@ -1,4 +1,5 @@
 from lectio.ml.chunking import TextChunk, build_chunks
+from lectio.ml.llm import ThinkFilter
 from lectio.ml.transcriber import TranscribedSegment, split_into_cues
 from lectio.modules.summaries.generator import locate_terms, normalize_outline
 from lectio.modules.summaries.schemas import KeyTerm, OutlineSection
@@ -130,3 +131,12 @@ def test_terms_are_deduplicated_and_located() -> None:
 def test_vtt_timestamp() -> None:
     assert format_vtt_timestamp(0) == "00:00:00.000"
     assert format_vtt_timestamp(3725.4567) == "01:02:05.457"
+
+
+def test_think_blocks_are_dropped_from_a_stream() -> None:
+    think = ThinkFilter()
+    pieces = ["<thi", "nk>reasoning", " goes </th", "ink>\n\nОтвет", " <", "b>да</b>"]
+
+    streamed = "".join(think.feed(piece) for piece in pieces) + think.flush()
+
+    assert streamed == "Ответ <b>да</b>"

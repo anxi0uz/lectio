@@ -49,12 +49,14 @@ from lectio.db.session import (  # noqa: E402
 from lectio.main import app  # noqa: E402
 from lectio.ml.embedder import get_query_embedder  # noqa: E402
 from lectio.ml.llm import get_llm  # noqa: E402
+from lectio.modules.lectures.router import get_url_probe  # noqa: E402
 from tests.support import (  # noqa: E402
     FakeEmbedder,
     FakeLLM,
     RegisteredUser,
     RegisterUser,
     alembic_config,
+    fake_url_probe,
 )
 
 
@@ -131,6 +133,7 @@ async def client(
 ) -> AsyncGenerator[AsyncClient]:
     app.dependency_overrides[get_query_embedder] = FakeEmbedder
     app.dependency_overrides[get_llm] = lambda: fake_llm
+    app.dependency_overrides[get_url_probe] = lambda: fake_url_probe
 
     transport = ASGITransport(
         app=app,

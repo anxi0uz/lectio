@@ -10,8 +10,13 @@ async def domain_error_handler(
 ) -> JSONResponse:
     assert isinstance(error, DomainError)
 
+    body: dict[str, str] = {"detail": error.detail}
+
+    if error.code is not None:
+        body["code"] = error.code
+
     return JSONResponse(
-        {"detail": error.detail},
+        body,
         status_code=error.status_code,
         headers=error.headers,
     )

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,3 +145,39 @@ async def test_question_answering_cites_sources(
     ]
     assert "[1] Лекция «Теорема Пифагора», 0:00–" in messages[-1]["content"]
     assert messages[-1]["content"].endswith("Вопрос: Чему равен квадрат гипотенузы?")
+
+
+async def test_question_answer_streams_as_events(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    lecture = await create_processed_lecture(db, "Теорема Пифагора", GEOMETRY)
+
+    async with client.stream(
+        "POST",
+        "/api/v1/qa/stream",
+        json={
+            "question": "Чему равен квадрат гипотенузы?",
+            "lecture_id": str(lecture.id),
+        },
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = (await response.aread()).decode()
+
+    events = [
+        (
+            block.split("\n")[0].removeprefix("event: "),
+            json.loads(block.split("\n")[1].removeprefix("data: ")),
+        )
+        for block in body.strip().split("\n\n")
+    ]
+    names = [name for name, _ in events]
+
+    assert names[0] == "sources"
+    assert events[0][1][0]["lecture_id"] == str(lecture.id)
+    assert names[-1] == "done"
+    assert (
+        "".join(data["text"] for name, data in events if name == "delta")
+        == "Ответ по лекции [1]."
+    )

@@ -1,7 +1,11 @@
 import hashlib
 import math
 import re
+import subprocess
+import tempfile
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID
@@ -9,6 +13,7 @@ from uuid import UUID
 from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lectio.core.media import RemoteVideo, UrlProbeError
 from lectio.ml.transcriber import TranscribedSegment
 from lectio.models import Lecture
 from lectio.models.chunk import EMBEDDING_DIM
@@ -23,6 +28,59 @@ WORD = re.compile(r"\w+")
 
 def alembic_config() -> Config:
     return Config(str(ALEMBIC_INI))
+
+
+SAMPLE_MEDIA = {
+    # Two seconds of a test pattern with a tone.
+    "video": (
+        ["-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=2"],
+        ["-f", "lavfi", "-i", "sine=frequency=440:duration=2"],
+        ["-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-shortest"],
+        "mp4",
+    ),
+    "silent": (
+        ["-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=2"],
+        [],
+        ["-c:v", "libx264", "-preset", "ultrafast"],
+        "mp4",
+    ),
+    "audio": (
+        [],
+        ["-f", "lavfi", "-i", "sine=frequency=440:duration=2"],
+        ["-c:a", "pcm_s16le"],
+        "wav",
+    ),
+}
+
+
+@cache
+def sample_media(kind: str) -> bytes:
+    """A tiny real media file made with ffmpeg, as the upload checks need."""
+    video_input, audio_input, codecs, extension = SAMPLE_MEDIA[kind]
+    path = Path(tempfile.mkdtemp(prefix="lectio-media-")) / f"sample.{extension}"
+
+    subprocess.run(
+        ["ffmpeg", "-nostdin", "-y", "-loglevel", "error"]
+        + video_input
+        + audio_input
+        + codecs
+        + [str(path)],
+        check=True,
+    )
+
+    return path.read_bytes()
+
+
+def fake_url_probe(url: str) -> RemoteVideo:
+    """Stands in for yt-dlp: the URL itself says what the page is."""
+    if "missing" in url:
+        raise UrlProbeError("Video unavailable")
+
+    return RemoteVideo(
+        title="Видео со страницы",
+        duration=36_000.0 if "long" in url else 600.0,
+        is_live="live" in url,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +144,16 @@ class FakeLLM:
         self.calls.append((system, messages))
 
         return "Ответ по лекции [1]."
+
+    async def stream(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+    ) -> AsyncIterator[str]:
+        self.calls.append((system, messages))
+
+        for piece in ("Ответ ", "по лекции ", "[1]."):
+            yield piece
 
     async def close(self) -> None:
         pass

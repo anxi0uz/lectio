@@ -1,11 +1,13 @@
 import json
 import re
+from collections.abc import AsyncIterator
 from functools import cache
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import structlog
 from openai import APIError, AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 from lectio.core.config import get_settings
 from lectio.core.exceptions import ServiceUnavailableError
@@ -20,6 +22,63 @@ JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 class LLMUnavailableError(ServiceUnavailableError):
     default_detail = "Language model is unavailable"
+    code = "llm_unavailable"
+
+
+class ThinkFilter:
+    """Drops <think>…</think> blocks from text that arrives in pieces."""
+
+    OPEN = "<think>"
+    CLOSE = "</think>"
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._thinking = False
+        self._started = False
+
+    def feed(self, chunk: str) -> str:
+        self._buffer += chunk
+        output = ""
+
+        while True:
+            if self._thinking:
+                end = self._buffer.find(self.CLOSE)
+                if end == -1:
+                    # Keep a tail that may be the start of the closing tag.
+                    self._buffer = self._buffer[-len(self.CLOSE) :]
+                    break
+                self._buffer = self._buffer[end + len(self.CLOSE) :]
+                self._thinking = False
+                continue
+
+            start = self._buffer.find(self.OPEN)
+            if start != -1:
+                output += self._buffer[:start]
+                self._buffer = self._buffer[start + len(self.OPEN) :]
+                self._thinking = True
+                continue
+
+            keep = self._partial_open_suffix()
+            output += self._buffer[: len(self._buffer) - keep]
+            self._buffer = self._buffer[len(self._buffer) - keep :]
+            break
+
+        if not self._started:
+            output = output.lstrip()
+            self._started = bool(output)
+
+        return output
+
+    def flush(self) -> str:
+        rest = "" if self._thinking else self._buffer
+        self._buffer = ""
+        return rest
+
+    def _partial_open_suffix(self) -> int:
+        for size in range(min(len(self.OPEN) - 1, len(self._buffer)), 0, -1):
+            if self.OPEN.startswith(self._buffer[-size:]):
+                return size
+        return 0
 
 
 class LLMClient:
@@ -37,6 +96,18 @@ class LLMClient:
         self._temperature = settings.llm_temperature
         self._system_suffix = "\n/no_think" if settings.llm_no_think else ""
 
+    def _messages(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+    ) -> list[ChatCompletionMessageParam]:
+        # Callers pass plain {"role", "content"} dicts; the SDK's TypedDicts
+        # describe the same shape per role.
+        return cast(
+            list[ChatCompletionMessageParam],
+            [{"role": "system", "content": system + self._system_suffix}, *messages],
+        )
+
     async def complete(
         self,
         system: str,
@@ -46,10 +117,7 @@ class LLMClient:
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[
-                    {"role": "system", "content": system + self._system_suffix},
-                    *messages,  # pyright: ignore[reportArgumentType]
-                ],
+                messages=self._messages(system, messages),
                 temperature=self._temperature,
                 response_format=(
                     {"type": "json_object"} if json_mode else {"type": "text"}
@@ -71,6 +139,44 @@ class LLMClient:
 
         # Reasoning models put their chain of thought inline.
         return THINK_BLOCK.sub("", content).strip()
+
+    async def stream(
+        self,
+        system: str,
+        messages: list[dict[str, str]],
+    ) -> AsyncIterator[str]:
+        """Yield the answer piece by piece as the model generates it."""
+        think = ThinkFilter()
+
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=self._messages(system, messages),
+                temperature=self._temperature,
+                stream=True,
+            )
+
+            async for event in response:
+                if not event.choices:
+                    continue
+
+                text = think.feed(event.choices[0].delta.content or "")
+                if text:
+                    yield text
+        except APIError as error:
+            log.warning(
+                "llm_stream_failed",
+                model=self._model,
+                error=str(error),
+            )
+            raise LLMUnavailableError(
+                f"Language model request failed: {error}",
+            ) from error
+        except OSError as error:
+            raise LLMUnavailableError from error
+
+        if rest := think.flush():
+            yield rest
 
     async def complete_json(
         self,
