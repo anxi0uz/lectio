@@ -1,0 +1,71 @@
+[project]
+name = "lectio"
+version = "0.1.0"
+description = "Semantic search, transcripts and summaries for video lectures"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "alembic>=1.18.5",
+    "fastapi[standard]>=0.162.0",
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
+    "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "numpy>=2.5.4",
+    "openai>=3.37.0",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.4",
+    "pydantic-settings>=2.14.2",
+    "redis>=8.0.1",
+    "sentence-transformers>=6.2.0",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "structlog>=26.1.0",
+    "torch>=2.14.1",
+    "yt-dlp>=2026.10.21",
+]
+
+[project.scripts]
+lectio = "lectio.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
+
+[tool.uv]
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+# CUDA 12 wheels: CTranslate2 links against cuBLAS 12 / cuDNN 9, and torch
+# pulls exactly those in. macOS takes the regular PyPI build with MPS.
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = ["src/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lectio", "tests"]

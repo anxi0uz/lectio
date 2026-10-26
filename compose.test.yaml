@@ -1,0 +1,39 @@
+services:
+  postgres-test:
+    image: docker.io/pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: lectio_test
+      POSTGRES_USER: lectio
+      POSTGRES_PASSWORD: lectio
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  redis-test:
+    image: docker.io/library/redis:8-alpine
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    ports:
+      - "127.0.0.1:${TEST_REDIS_PORT:-6380}:6379"
+    tmpfs:
+      - /data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 2s
+      timeout: 5s
+      retries: 15

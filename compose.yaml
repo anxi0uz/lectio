@@ -1,0 +1,124 @@
+# Default: only infrastructure, the API and the worker run on the host so the
+# models can use the GPU (CUDA on Linux, Metal on macOS).
+#   podman compose up -d
+#
+# Fully containerized CPU build, for running without a Python setup:
+#   podman compose --profile full up -d --build
+
+x-app-env: &app-env
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-lectio}:${POSTGRES_PASSWORD:-lectio}@postgres:5432/${POSTGRES_DB:-lectio}
+    REDIS_URL: redis://redis:6379/0
+    STORAGE_DIR: /data/storage
+    HF_HOME: /data/hf
+    DEVICE: cpu
+    WHISPER_COMPUTE_TYPE: int8
+    LLM_BASE_URL: ${CONTAINER_LLM_BASE_URL:-http://host.containers.internal:11434/v1}
+  volumes:
+    - app_data:/data
+
+services:
+  migrate:
+    <<: *app-env
+    profiles:
+      - full
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: localhost/lectio:latest
+    command:
+      - alembic
+      - upgrade
+      - head
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    <<: *app-env
+    profiles:
+      - full
+    image: localhost/lectio:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen("http://127.0.0.1:8000/health")
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    <<: *app-env
+    profiles:
+      - full
+    image: localhost/lectio:latest
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - lectio.worker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: docker.io/pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lectio}
+      POSTGRES_USER: ${POSTGRES_USER:-lectio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lectio}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: docker.io/library/redis:8-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_data:
