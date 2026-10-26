@@ -3,9 +3,12 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lectio.models import Chapter, Lecture
+from lectio.models import Chapter, Lecture, User
 from lectio.models.enums import LectureStatus
-from lectio.modules.lectures.service import get_lecture_by_id
+from lectio.modules.lectures.service import (
+    get_lecture_by_id,
+    get_managed_lecture,
+)
 from lectio.modules.summaries.exceptions import SummaryNotReadyError
 from lectio.modules.summaries.generator import GeneratedSummary
 from lectio.modules.summaries.schemas import (
@@ -86,8 +89,9 @@ async def get_summary(
 async def ensure_can_resummarize(
     db: AsyncSession,
     lecture_id: UUID,
+    user: User,
 ) -> Lecture:
-    lecture = await get_lecture_by_id(db, lecture_id)
+    lecture = await get_managed_lecture(db, lecture_id, user)
 
     if lecture.status != LectureStatus.READY:
         raise SummaryNotReadyError

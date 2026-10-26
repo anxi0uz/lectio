@@ -12,6 +12,11 @@ class LectureStatus(StrEnum):
     FAILED = "failed"
 
 
+class UserRole(StrEnum):
+    STUDENT = "student"
+    TEACHER = "teacher"
+
+
 class SourceType(StrEnum):
     UPLOAD = "upload"
     URL = "url"

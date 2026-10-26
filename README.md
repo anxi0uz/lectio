@@ -32,6 +32,9 @@
 - чат «вопрос-ответ» по лекции или курсу со ссылками на фрагменты;
 - видео отдаётся с поддержкой HTTP Range — перемотка работает сразу;
 - фоновая обработка с этапами и прогрессом, перезапуск после сбоя;
+- личный кабинет: роли студента и преподавателя, запись на курсы, прогресс
+  просмотра с продолжением с того же места, избранное, закладки с заметками
+  на таймкодах, история поиска и дашборд;
 - полностью офлайн: все модели локальные, LLM — через Ollama;
 - один код для Linux + NVIDIA и macOS на Apple Silicon, модели выбираются
   в `.env`.
@@ -49,6 +52,7 @@
 | Эмбеддинги | sentence-transformers, BAAI/bge-m3 |
 | Конспекты и чат | любая OpenAI-совместимая LLM: Ollama, LM Studio, vLLM, API |
 | Медиа | ffmpeg, yt-dlp |
+| Авторизация | JWT access-токены, ротируемые refresh-токены в Redis, Argon2 |
 | Логи | structlog, request ID в логах и заголовках |
 | Контейнеры | Podman Compose, Dockerfile |
 
@@ -93,12 +97,19 @@ src/lectio/
 ├── ml/             # Whisper, эмбеддинги, реранкер, LLM-клиент, нарезка
 ├── models/         # ORM-модели
 ├── modules/
+│   ├── auth/       # регистрация, вход, токены, роли и права
+│   ├── users/      # профиль и аватар
 │   ├── courses/
 │   ├── lectures/   # загрузка, импорт, статусы, отдача видео
 │   ├── transcripts/# сегменты и WebVTT
 │   ├── search/     # индексация и гибридный поиск
 │   ├── summaries/  # конспект, оглавление, термины
-│   └── qa/         # вопрос-ответ
+│   ├── qa/         # вопрос-ответ
+│   ├── enrollments/# запись на курсы и прогресс по курсу
+│   ├── progress/   # позиция просмотра, «продолжить просмотр»
+│   ├── favorites/
+│   ├── bookmarks/  # закладки с заметками на таймкодах
+│   └── dashboard/  # сводка личного кабинета
 ├── worker/         # конвейер обработки
 └── cli.py          # seed / reindex / resummarize
 ```
@@ -195,33 +206,87 @@ uv run lectio reindex         # пересчитать эмбеддинги
 
 База через git не переносится — на новой машине прогоните `seed` заново.
 
+Для демо на локальной базе заведены два аккаунта с паролем `demo-password`:
+`demo-teacher@example.com` (преподаватель) и `demo-student@example.com`
+(студент). На новой машине их нужно зарегистрировать заново через
+`POST /auth/register`.
+
+## Пользователи и права
+
+Две роли, выбираются при регистрации: **студент** (по умолчанию) и
+**преподаватель**.
+
+- Курсы и лекции создают только преподаватели и становятся их владельцами;
+  менять и удалять их может только владелец. Лекции и курсы без владельца
+  (импортированные через `lectio seed`) доступны всем преподавателям.
+- Просмотр, поиск, субтитры, конспекты и чат открыты без входа: `<video>` и
+  `<track>` не умеют отправлять заголовок `Authorization`.
+- Личные данные — прогресс, избранное, закладки, история поиска — требуют
+  входа. Поиск работает и анонимно, а для вошедшего пользователя запрос
+  сохраняется в историю.
+
+Access-токен передаётся в заголовке `Authorization: Bearer …` и живёт 30
+минут. Refresh-токен лежит в HttpOnly-cookie на пути `/api/v1/auth`;
+`POST /auth/refresh` выдаёт новую пару, старый refresh-токен при этом
+перестаёт действовать. Фронту на другом порту нужен `credentials: "include"`.
+
 ## API
 
-Все пути с префиксом `/api/v1`.
+Все пути с префиксом `/api/v1`. 🔒 — нужен вход, 🎓 — нужна роль
+преподавателя.
 
 | Метод | Путь | Что делает |
 | --- | --- | --- |
-| `POST` | `/lectures` | загрузить файл (`multipart`: `file`, `title?`, `course_id?`) |
-| `POST` | `/lectures/import` | импорт по ссылке `{url, title?, course_id?}` |
-| `GET` | `/lectures` | список (`course_id`, `status`, `limit`, `offset`) |
+| `POST` | `/auth/register` | регистрация `{email, password, first_name, last_name, role?}` |
+| `POST` | `/auth/login` | вход, отдаёт access-токен и ставит refresh-cookie |
+| `POST` | `/auth/refresh` | новый access-токен по cookie |
+| `POST` | `/auth/logout` | выход на этом устройстве |
+| `POST` | `/auth/logout-all` 🔒 | выход на всех устройствах |
+| `GET` | `/auth/me` 🔒 | текущий пользователь |
+| `PATCH` | `/users/me` 🔒 | изменить имя |
+| `PUT/DELETE` | `/users/me/avatar` 🔒 | загрузить (PNG, JPEG, WebP до 5 МБ) или удалить аватар |
+| `GET` | `/users/{id}` | публичный профиль, например преподавателя |
+| `GET` | `/users/{id}/avatar` | картинка аватара |
+| `POST` | `/lectures` 🎓 | загрузить файл (`multipart`: `file`, `title?`, `course_id?`) |
+| `POST` | `/lectures/import` 🎓 | импорт по ссылке `{url, title?, course_id?}` |
+| `GET` | `/lectures` | список (`course_id`, `owner_id`, `status`, `limit`, `offset`) |
 | `GET` | `/lectures/{id}` | лекция со статусом и прогрессом |
-| `PATCH` | `/lectures/{id}` | переименовать, перенести в курс |
-| `DELETE` | `/lectures/{id}` | удалить вместе с файлами |
-| `POST` | `/lectures/{id}/reprocess` | обработать заново |
+| `PATCH` | `/lectures/{id}` 🎓 | переименовать, перенести в курс |
+| `DELETE` | `/lectures/{id}` 🎓 | удалить вместе с файлами |
+| `POST` | `/lectures/{id}/reprocess` 🎓 | обработать заново |
 | `GET` | `/lectures/{id}/video` | видео с поддержкой Range |
 | `GET` | `/lectures/{id}/segments` | реплики расшифровки с таймкодами |
 | `GET` | `/lectures/{id}/subtitles.vtt` | субтитры WebVTT |
 | `GET` | `/lectures/{id}/summary` | конспект, оглавление, термины |
-| `POST` | `/lectures/{id}/summary` | перегенерировать конспект |
+| `POST` | `/lectures/{id}/summary` 🎓 | перегенерировать конспект |
 | `GET` | `/search?q=` | поиск (`lecture_id`, `course_id`, `limit`) |
 | `POST` | `/qa` | вопрос `{question, lecture_id?, course_id?, history?}` |
-| `GET/POST` | `/courses` | курсы |
-| `GET/DELETE` | `/courses/{id}` | курс |
+| `GET` | `/courses` | курсы с числом лекций и общей длительностью (`owner_id`) |
+| `POST` | `/courses` 🎓 | создать курс |
+| `GET` | `/courses/{id}` | курс |
+| `DELETE` | `/courses/{id}` 🎓 | удалить курс, лекции остаются без курса |
+| `PUT/DELETE` | `/courses/{id}/enrollment` 🔒 | записаться на курс или отписаться |
+| `GET` | `/me/courses` 🔒 | мои курсы с прогрессом прохождения |
+| `GET/PUT` | `/lectures/{id}/progress` 🔒 | позиция просмотра `{position_seconds, completed?}` |
+| `GET` | `/me/continue-watching` 🔒 | недосмотренные лекции |
+| `PUT/DELETE` | `/lectures/{id}/favorite` 🔒 | добавить в избранное или убрать |
+| `GET` | `/me/favorites` 🔒 | избранные лекции |
+| `POST/GET` | `/lectures/{id}/bookmarks` 🔒 | закладки в лекции `{position_seconds, note?}` |
+| `PATCH/DELETE` | `/bookmarks/{id}` 🔒 | изменить или удалить закладку |
+| `GET` | `/me/bookmarks` 🔒 | все закладки |
+| `GET/DELETE` | `/me/search-history` 🔒 | недавние запросы, очистка |
+| `GET` | `/me/dashboard` 🔒 | сводка: статистика, «продолжить», недавние поиски |
+| `GET` | `/lectures/{id}/me` 🔒 | всё о лекции для текущего пользователя одним запросом |
 
 Статусы лекции: `pending → downloading → extracting_audio → transcribing →
 indexing → summarizing → ready` или `failed` (причина в `error`). `progress` —
 доля выполнения текущего этапа от 0 до 1. Расшифровка и поиск доступны уже на
 этапе `summarizing`.
+
+Прогресс просмотра стоит отправлять каждые несколько секунд во время
+воспроизведения и на паузе. Лекция считается просмотренной, когда позиция
+доходит до 90%; перемотка назад отметку не снимает, снять её можно явно
+через `completed: false`.
 
 `highlight` в результатах поиска — HTML, где совпавшие слова обёрнуты в
 `<mark>`; остальной текст экранирован.

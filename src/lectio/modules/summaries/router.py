@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, status
 
 from lectio.api.dependencies import RedisDep, SessionDep
 from lectio.core.jobs import JobKind, enqueue_job
+from lectio.modules.auth.dependencies import CurrentUserDep
 from lectio.modules.summaries.schemas import SummaryResponse
 from lectio.modules.summaries.service import (
     ensure_can_resummarize,
@@ -34,11 +35,12 @@ async def get_summary_endpoint(
 )
 async def regenerate_summary_endpoint(
     lecture_id: UUID,
+    current_user: CurrentUserDep,
     db: SessionDep,
     redis: RedisDep,
     background_tasks: BackgroundTasks,
 ) -> None:
-    await ensure_can_resummarize(db, lecture_id)
+    await ensure_can_resummarize(db, lecture_id, current_user)
 
     background_tasks.add_task(
         enqueue_job,

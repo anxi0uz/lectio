@@ -2,6 +2,7 @@ from functools import cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Device = Literal["auto", "cuda", "mps", "cpu"]
@@ -20,8 +21,21 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    jwt_secret: str = Field(min_length=32)
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
+    refresh_cookie_secure: bool = True
+
+    login_rate_limit_per_ip: int = 50
+    login_rate_limit_per_account: int = 10
+    login_rate_limit_window_seconds: int = 15 * 60
+    register_rate_limit_per_ip: int = 10
+    register_rate_limit_window_seconds: int = 60 * 60
+
     storage_dir: Path = Path("storage")
     max_upload_mb: int = 4096
+    max_avatar_mb: int = 5
     download_max_height: int = 720
 
     device: Device = "auto"

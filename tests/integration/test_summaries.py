@@ -7,7 +7,7 @@ from lectio.core.jobs import JOBS_QUEUE_KEY
 from lectio.modules.summaries.generator import GeneratedSummary
 from lectio.modules.summaries.schemas import KeyTerm, OutlineSection
 from lectio.modules.summaries.service import save_summary
-from tests.support import create_processed_lecture
+from tests.support import RegisteredUser, create_processed_lecture
 
 pytestmark = pytest.mark.anyio
 
@@ -16,6 +16,7 @@ async def test_summary_tree_and_regeneration(
     client: AsyncClient,
     db: AsyncSession,
     test_redis: Redis,
+    teacher: RegisteredUser,
 ) -> None:
     lecture = await create_processed_lecture(
         db,
@@ -67,7 +68,7 @@ async def test_summary_tree_and_regeneration(
         {"term": "Мысль", "definition": "То, что думают", "start_seconds": 0.0},
     ]
 
-    regenerate = await client.post(url)
+    regenerate = await client.post(url, headers=teacher.headers)
 
     assert regenerate.status_code == 202
     assert await test_redis.llen(JOBS_QUEUE_KEY) == 1  # pyright: ignore[reportGeneralTypeIssues]

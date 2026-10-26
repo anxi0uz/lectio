@@ -18,6 +18,13 @@ def ensure_lecture_dir(lecture_id: UUID) -> Path:
     return path
 
 
+def avatars_dir() -> Path:
+    path = get_settings().storage_dir / "avatars"
+    path.mkdir(parents=True, exist_ok=True)
+
+    return path
+
+
 def resolve_media_path(relative: str) -> Path:
     return get_settings().storage_dir / relative
 

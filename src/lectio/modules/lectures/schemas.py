@@ -39,6 +39,7 @@ class LectureResponse(BaseModel):
 
     id: UUID
     course_id: UUID | None
+    owner_id: UUID | None
     title: str
     source_type: SourceType
     source_url: str | None

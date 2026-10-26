@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, Text, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lectio.db.base import Base
@@ -18,6 +18,14 @@ class Course(Base):
         Uuid,
         primary_key=True,
         default=uuid4,
+    )
+
+    owner_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+        ),
+        index=True,
     )
 
     title: Mapped[str] = mapped_column(

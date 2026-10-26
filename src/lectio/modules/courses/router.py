@@ -3,11 +3,12 @@ from uuid import UUID
 from fastapi import APIRouter, status
 
 from lectio.api.dependencies import SessionDep
+from lectio.modules.auth.dependencies import CurrentUserDep, TeacherDep
 from lectio.modules.courses.schemas import CourseCreate, CourseResponse
 from lectio.modules.courses.service import (
     create_course,
     delete_course,
-    get_course_by_id,
+    get_course_details,
     list_courses,
 )
 
@@ -24,9 +25,10 @@ router = APIRouter(
 )
 async def create_course_endpoint(
     payload: CourseCreate,
+    teacher: TeacherDep,
     db: SessionDep,
 ) -> CourseResponse:
-    course = await create_course(db, payload)
+    course = await create_course(db, teacher, payload)
 
     return CourseResponse.model_validate(course)
 
@@ -37,10 +39,10 @@ async def create_course_endpoint(
 )
 async def list_courses_endpoint(
     db: SessionDep,
+    owner_id: UUID | None = None,
 ) -> list[CourseResponse]:
-    courses = await list_courses(db)
-
-    return [CourseResponse.model_validate(course) for course in courses]
+    """All courses; with owner_id, those a teacher created."""
+    return await list_courses(db, owner_id=owner_id)
 
 
 @router.get(
@@ -51,9 +53,7 @@ async def get_course_endpoint(
     course_id: UUID,
     db: SessionDep,
 ) -> CourseResponse:
-    course = await get_course_by_id(db, course_id)
-
-    return CourseResponse.model_validate(course)
+    return await get_course_details(db, course_id)
 
 
 @router.delete(
@@ -62,6 +62,7 @@ async def get_course_endpoint(
 )
 async def delete_course_endpoint(
     course_id: UUID,
+    current_user: CurrentUserDep,
     db: SessionDep,
 ) -> None:
-    await delete_course(db, course_id)
+    await delete_course(db, course_id, current_user)

@@ -1,7 +1,9 @@
 import hashlib
 import math
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 from uuid import UUID
 
 from alembic.config import Config
@@ -21,6 +23,30 @@ WORD = re.compile(r"\w+")
 
 def alembic_config() -> Config:
     return Config(str(ALEMBIC_INI))
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredUser:
+    id: str
+    email: str
+    access_token: str
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+        }
+
+
+class RegisterUser(Protocol):
+    async def __call__(
+        self,
+        email: str,
+        role: str = "student",
+        password: str = "test-password",
+        first_name: str = "Test",
+        last_name: str = "User",
+    ) -> RegisteredUser: ...
 
 
 class FakeEmbedder:

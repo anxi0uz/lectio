@@ -26,6 +26,26 @@ class NotFoundError(DomainError):
     default_detail = "Not found"
 
 
+class PermissionDeniedError(DomainError):
+    status_code = status.HTTP_403_FORBIDDEN
+    default_detail = "Permission denied"
+
+
+class AuthenticationError(DomainError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    default_detail = "Authentication failed"
+
+
+class RateLimitExceededError(DomainError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    default_detail = "Too many requests"
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 class ConflictError(DomainError):
     status_code = status.HTTP_409_CONFLICT
     default_detail = "Conflict"

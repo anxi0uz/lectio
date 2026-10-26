@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from lectio.api.dependencies import RedisDep, SessionDep
 from lectio.core.jobs import JobKind, enqueue_job
 from lectio.models.enums import LectureStatus
+from lectio.modules.auth.dependencies import CurrentUserDep, TeacherDep
 from lectio.modules.lectures.schemas import (
     LectureImport,
     LectureResponse,
@@ -46,6 +47,7 @@ router = APIRouter(
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_lecture_endpoint(
+    teacher: TeacherDep,
     db: SessionDep,
     redis: RedisDep,
     background_tasks: BackgroundTasks,
@@ -55,6 +57,7 @@ async def upload_lecture_endpoint(
 ) -> LectureResponse:
     lecture = await create_uploaded_lecture(
         db,
+        teacher,
         file,
         title.strip() if title else None,
         course_id,
@@ -77,11 +80,12 @@ async def upload_lecture_endpoint(
 )
 async def import_lecture_endpoint(
     payload: LectureImport,
+    teacher: TeacherDep,
     db: SessionDep,
     redis: RedisDep,
     background_tasks: BackgroundTasks,
 ) -> LectureResponse:
-    lecture = await create_imported_lecture(db, payload)
+    lecture = await create_imported_lecture(db, teacher, payload)
 
     background_tasks.add_task(
         enqueue_job,
@@ -103,6 +107,7 @@ async def list_lectures_endpoint(
     offset: Annotated[int, Query(ge=0)] = 0,
     course_id: UUID | None = None,
     status: LectureStatus | None = None,
+    owner_id: UUID | None = None,
 ) -> list[LectureResponse]:
     lectures = await list_lectures(
         db,
@@ -110,6 +115,7 @@ async def list_lectures_endpoint(
         limit,
         course_id,
         status,
+        owner_id,
     )
 
     return [LectureResponse.model_validate(lecture) for lecture in lectures]
@@ -135,11 +141,13 @@ async def get_lecture_endpoint(
 async def update_lecture_endpoint(
     lecture_id: UUID,
     payload: LectureUpdate,
+    current_user: CurrentUserDep,
     db: SessionDep,
 ) -> LectureResponse:
     lecture = await update_lecture(
         db,
         lecture_id,
+        current_user,
         payload,
     )
 
@@ -153,11 +161,12 @@ async def update_lecture_endpoint(
 )
 async def reprocess_lecture_endpoint(
     lecture_id: UUID,
+    current_user: CurrentUserDep,
     db: SessionDep,
     redis: RedisDep,
     background_tasks: BackgroundTasks,
 ) -> LectureResponse:
-    lecture = await restart_processing(db, lecture_id)
+    lecture = await restart_processing(db, lecture_id, current_user)
 
     background_tasks.add_task(
         enqueue_job,
@@ -175,9 +184,10 @@ async def reprocess_lecture_endpoint(
 )
 async def delete_lecture_endpoint(
     lecture_id: UUID,
+    current_user: CurrentUserDep,
     db: SessionDep,
 ) -> None:
-    await delete_lecture(db, lecture_id)
+    await delete_lecture(db, lecture_id, current_user)
 
 
 @router.get(

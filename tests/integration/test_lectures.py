@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from redis.asyncio import Redis
 
 from lectio.core.jobs import JOBS_QUEUE_KEY, Job, JobKind
+from tests.support import RegisteredUser
 
 pytestmark = pytest.mark.anyio
 
@@ -19,10 +20,12 @@ async def _queued_jobs(redis: Redis) -> list[Job]:
 
 async def test_upload_queues_processing_and_serves_video(
     client: AsyncClient,
+    teacher: RegisteredUser,
     test_redis: Redis,
 ) -> None:
     response = await client.post(
         "/api/v1/lectures",
+        headers=teacher.headers,
         files={"file": ("intro.mp4", VIDEO_BYTES, "video/mp4")},
         data={"title": "  Введение  "},
     )
@@ -57,17 +60,21 @@ async def test_upload_queues_processing_and_serves_video(
 
 async def test_upload_validation(
     client: AsyncClient,
+    teacher: RegisteredUser,
 ) -> None:
     wrong_type = await client.post(
         "/api/v1/lectures",
+        headers=teacher.headers,
         files={"file": ("notes.pdf", b"%PDF", "application/pdf")},
     )
     too_large = await client.post(
         "/api/v1/lectures",
+        headers=teacher.headers,
         files={"file": ("big.mp4", b"0" * (1024 * 1024 + 1), "video/mp4")},
     )
     missing_course = await client.post(
         "/api/v1/lectures",
+        headers=teacher.headers,
         files={"file": ("a.mp4", VIDEO_BYTES, "video/mp4")},
         data={"course_id": "00000000-0000-0000-0000-000000000000"},
     )
@@ -82,14 +89,17 @@ async def test_upload_validation(
 
 async def test_import_by_url(
     client: AsyncClient,
+    teacher: RegisteredUser,
     test_redis: Redis,
 ) -> None:
     response = await client.post(
         "/api/v1/lectures/import",
+        headers=teacher.headers,
         json={"url": "https://www.youtube.com/watch?v=abc"},
     )
     invalid = await client.post(
         "/api/v1/lectures/import",
+        headers=teacher.headers,
         json={"url": "not a url"},
     )
 
@@ -111,12 +121,20 @@ async def test_import_by_url(
 
 async def test_lecture_crud_and_reprocess(
     client: AsyncClient,
+    teacher: RegisteredUser,
     test_redis: Redis,
 ) -> None:
-    course = (await client.post("/api/v1/courses", json={"title": "Геометрия"})).json()
+    course = (
+        await client.post(
+            "/api/v1/courses",
+            headers=teacher.headers,
+            json={"title": "Геометрия"},
+        )
+    ).json()
     lecture = (
         await client.post(
             "/api/v1/lectures",
+            headers=teacher.headers,
             files={"file": ("one.webm", VIDEO_BYTES, "video/webm")},
         )
     ).json()
@@ -126,13 +144,17 @@ async def test_lecture_crud_and_reprocess(
 
     patched = await client.patch(
         lecture_url,
+        headers=teacher.headers,
         json={"title": "Первая", "course_id": course["id"]},
     )
     by_course = await client.get(
         "/api/v1/lectures",
         params={"course_id": course["id"]},
     )
-    busy = await client.post(f"{lecture_url}/reprocess")
+    busy = await client.post(
+        f"{lecture_url}/reprocess",
+        headers=teacher.headers,
+    )
     not_ready_segments = await client.get(f"{lecture_url}/segments")
 
     assert patched.status_code == 200
@@ -142,7 +164,7 @@ async def test_lecture_crud_and_reprocess(
     assert busy.status_code == 409
     assert not_ready_segments.status_code == 409
 
-    deleted = await client.delete(lecture_url)
+    deleted = await client.delete(lecture_url, headers=teacher.headers)
     missing = await client.get(lecture_url)
     video = await client.get(f"{lecture_url}/video")
 
@@ -153,17 +175,28 @@ async def test_lecture_crud_and_reprocess(
 
 async def test_deleting_course_keeps_lectures(
     client: AsyncClient,
+    teacher: RegisteredUser,
 ) -> None:
-    course = (await client.post("/api/v1/courses", json={"title": "Физика"})).json()
+    course = (
+        await client.post(
+            "/api/v1/courses",
+            headers=teacher.headers,
+            json={"title": "Физика"},
+        )
+    ).json()
     lecture = (
         await client.post(
             "/api/v1/lectures",
+            headers=teacher.headers,
             files={"file": ("a.mp4", VIDEO_BYTES, "video/mp4")},
             data={"course_id": course["id"]},
         )
     ).json()
 
-    deleted = await client.delete(f"/api/v1/courses/{course['id']}")
+    deleted = await client.delete(
+        f"/api/v1/courses/{course['id']}",
+        headers=teacher.headers,
+    )
     after = await client.get(f"/api/v1/lectures/{lecture['id']}")
 
     assert deleted.status_code == 204

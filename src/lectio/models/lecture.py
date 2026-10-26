@@ -54,6 +54,14 @@ class Lecture(Base):
         ),
     )
 
+    owner_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+        ),
+        index=True,
+    )
+
     title: Mapped[str] = mapped_column(
         String(300),
     )

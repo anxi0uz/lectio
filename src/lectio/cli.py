@@ -50,6 +50,7 @@ async def seed(
             if course is None:
                 course = await create_course(
                     db,
+                    None,
                     CourseCreate(title=course_title),
                 )
 
@@ -66,7 +67,7 @@ async def seed(
                 print(f"skipped, not a URL: {url}")
                 continue
 
-            lectures.append(await create_imported_lecture(db, data))
+            lectures.append(await create_imported_lecture(db, None, data))
 
         await db.commit()
 

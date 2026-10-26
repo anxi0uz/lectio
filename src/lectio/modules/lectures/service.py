@@ -15,13 +15,14 @@ from lectio.core.storage import (
     resolve_media_path,
     to_media_path,
 )
-from lectio.models import Lecture
+from lectio.models import Lecture, User
 from lectio.models.enums import (
     IN_PROGRESS_STATUSES,
     SEARCHABLE_STATUSES,
     LectureStatus,
     SourceType,
 )
+from lectio.modules.auth.permissions import ensure_can_manage
 from lectio.modules.courses.service import get_course_by_id
 from lectio.modules.lectures.exceptions import (
     FileTooLargeError,
@@ -75,8 +76,21 @@ async def save_upload(
             await file.write(chunk)
 
 
+async def _ensure_can_add_to_course(
+    db: AsyncSession,
+    course_id: UUID,
+    user: User | None,
+) -> None:
+    course = await get_course_by_id(db, course_id)
+
+    # The CLI imports without a user.
+    if user is not None:
+        ensure_can_manage(course.owner_id, user)
+
+
 async def create_uploaded_lecture(
     db: AsyncSession,
+    owner: User,
     upload: UploadFile,
     title: str | None,
     course_id: UUID | None,
@@ -90,7 +104,7 @@ async def create_uploaded_lecture(
         )
 
     if course_id is not None:
-        await get_course_by_id(db, course_id)
+        await _ensure_can_add_to_course(db, course_id, owner)
 
     lecture_id = uuid4()
     destination = ensure_lecture_dir(lecture_id) / f"video{suffix}"
@@ -103,6 +117,7 @@ async def create_uploaded_lecture(
 
     lecture = Lecture(
         id=lecture_id,
+        owner_id=owner.id,
         course_id=course_id,
         title=(title or filename.stem or "Untitled lecture")[:300],
         source_type=SourceType.UPLOAD,
@@ -127,14 +142,16 @@ async def create_uploaded_lecture(
 
 async def create_imported_lecture(
     db: AsyncSession,
+    owner: User | None,
     data: LectureImport,
 ) -> Lecture:
     if data.course_id is not None:
-        await get_course_by_id(db, data.course_id)
+        await _ensure_can_add_to_course(db, data.course_id, owner)
 
     url = str(data.url)
 
     lecture = Lecture(
+        owner_id=owner.id if owner else None,
         course_id=data.course_id,
         # The worker replaces it with the video title unless one was given.
         title=data.title or url[:300],
@@ -163,8 +180,12 @@ async def list_lectures(
     limit: int,
     course_id: UUID | None = None,
     status: LectureStatus | None = None,
+    owner_id: UUID | None = None,
 ) -> list[Lecture]:
     stmt = select(Lecture)
+
+    if owner_id is not None:
+        stmt = stmt.where(Lecture.owner_id == owner_id)
 
     if course_id is not None:
         stmt = stmt.where(Lecture.course_id == course_id)
@@ -208,19 +229,31 @@ async def get_searchable_lecture(
     return lecture
 
 
+async def get_managed_lecture(
+    db: AsyncSession,
+    lecture_id: UUID,
+    user: User,
+) -> Lecture:
+    lecture = await get_lecture_by_id(db, lecture_id)
+    ensure_can_manage(lecture.owner_id, user)
+
+    return lecture
+
+
 async def update_lecture(
     db: AsyncSession,
     lecture_id: UUID,
+    user: User,
     data: LectureUpdate,
 ) -> Lecture:
-    lecture = await get_lecture_by_id(db, lecture_id)
+    lecture = await get_managed_lecture(db, lecture_id, user)
     updates = data.model_dump(exclude_unset=True)
 
     if not updates:
         return lecture
 
     if updates.get("course_id") is not None:
-        await get_course_by_id(db, updates["course_id"])
+        await _ensure_can_add_to_course(db, updates["course_id"], user)
 
     if "title" in updates and updates["title"] is None:
         del updates["title"]
@@ -243,8 +276,9 @@ async def update_lecture(
 async def restart_processing(
     db: AsyncSession,
     lecture_id: UUID,
+    user: User,
 ) -> Lecture:
-    lecture = await get_lecture_by_id(db, lecture_id)
+    lecture = await get_managed_lecture(db, lecture_id, user)
 
     if lecture.status in IN_PROGRESS_STATUSES:
         raise LectureBusyError
@@ -267,8 +301,9 @@ async def restart_processing(
 async def delete_lecture(
     db: AsyncSession,
     lecture_id: UUID,
+    user: User,
 ) -> None:
-    lecture = await get_lecture_by_id(db, lecture_id)
+    lecture = await get_managed_lecture(db, lecture_id, user)
 
     await db.delete(lecture)
     await db.flush()
@@ -277,6 +312,7 @@ async def delete_lecture(
     log.info(
         "lecture_deleted",
         lecture_id=str(lecture_id),
+        deleted_by=str(user.id),
     )
 
 

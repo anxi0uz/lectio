@@ -19,6 +19,8 @@ os.environ.update(
         "DATABASE_URL": TEST_DATABASE_URL,
         "REDIS_URL": TEST_REDIS_URL,
         "STORAGE_DIR": tempfile.mkdtemp(prefix="lectio-test-"),
+        "JWT_SECRET": "test-jwt-secret-that-is-at-least-32-characters",
+        "REFRESH_COOKIE_SECURE": "false",
         "MAX_UPLOAD_MB": "1",
         "PRELOAD_MODELS": "false",
         "RERANKER_MODEL": "",
@@ -47,7 +49,13 @@ from lectio.db.session import (  # noqa: E402
 from lectio.main import app  # noqa: E402
 from lectio.ml.embedder import get_query_embedder  # noqa: E402
 from lectio.ml.llm import get_llm  # noqa: E402
-from tests.support import FakeEmbedder, FakeLLM, alembic_config  # noqa: E402
+from tests.support import (  # noqa: E402
+    FakeEmbedder,
+    FakeLLM,
+    RegisteredUser,
+    RegisterUser,
+    alembic_config,
+)
 
 
 @pytest.fixture(scope="session")
@@ -137,3 +145,51 @@ async def client(
             yield http_client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def register_user(
+    client: AsyncClient,
+) -> RegisterUser:
+    async def register_user_impl(
+        email: str,
+        role: str = "student",
+        password: str = "test-password",
+        first_name: str = "Test",
+        last_name: str = "User",
+    ) -> RegisteredUser:
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email,
+                "password": password,
+                "first_name": first_name,
+                "last_name": last_name,
+                "role": role,
+            },
+        )
+        assert response.status_code == 201
+
+        payload = response.json()
+
+        return RegisteredUser(
+            id=payload["user"]["id"],
+            email=payload["user"]["email"],
+            access_token=payload["access_token"],
+        )
+
+    return register_user_impl
+
+
+@pytest.fixture
+async def teacher(
+    register_user: RegisterUser,
+) -> RegisteredUser:
+    return await register_user("teacher@example.com", role="teacher")
+
+
+@pytest.fixture
+async def student(
+    register_user: RegisterUser,
+) -> RegisteredUser:
+    return await register_user("student@example.com")
