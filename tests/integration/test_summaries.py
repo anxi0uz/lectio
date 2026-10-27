@@ -29,6 +29,7 @@ async def test_summary_tree_and_regeneration(
 
     assert empty.json()["summary"] is None
     assert empty.json()["chapters"] == []
+    assert empty.json()["suggested_questions"] == []
 
     await save_summary(
         db,
@@ -66,6 +67,19 @@ async def test_summary_tree_and_regeneration(
     assert filled["chapters"][1]["start_seconds"] == 30
     assert filled["key_terms"] == [
         {"term": "Мысль", "definition": "То, что думают", "start_seconds": 0.0},
+    ]
+    # Without generated questions the chat gets ones built from the lecture.
+    assert filled["suggested_questions"] == [
+        "Что такое «Мысль»?",
+        "Объясни подробнее: Итоги",
+        "Какие главные выводы этой лекции?",
+    ]
+
+    lecture.suggested_questions = ["Почему мысль первая?"]
+    await db.commit()
+
+    assert (await client.get(url)).json()["suggested_questions"] == [
+        "Почему мысль первая?",
     ]
 
     regenerate = await client.post(url, headers=teacher.headers)

@@ -446,7 +446,13 @@ export function LecturePage() {
 
         <aside className="lecture-aside">
           <NowSpeaking segments={segments} time={time} onSeek={seek} />
-          <ChatPanel lectureId={id} enabled={searchable} chapters={chapters} onOpenSource={openSource} />
+          <ChatPanel
+            lectureId={id}
+            enabled={searchable}
+            chapters={chapters}
+            suggestions={summary?.suggested_questions ?? []}
+            onOpenSource={openSource}
+          />
           {course && <CourseContent course={course} currentId={id} />}
         </aside>
       </section>

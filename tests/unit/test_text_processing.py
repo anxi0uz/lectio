@@ -3,7 +3,11 @@ from lectio.ml.llm import ThinkFilter
 from lectio.ml.transcriber import TranscribedSegment, split_into_cues
 from lectio.modules.quizzes.generator import build_question
 from lectio.modules.quizzes.schemas import DraftQuestion
-from lectio.modules.summaries.generator import locate_terms, normalize_outline
+from lectio.modules.summaries.generator import (
+    clean_questions,
+    locate_terms,
+    normalize_outline,
+)
 from lectio.modules.summaries.schemas import KeyTerm, OutlineSection
 from lectio.modules.transcripts.service import format_vtt_timestamp
 
@@ -172,3 +176,25 @@ def test_build_question_rejects_giveaways() -> None:
 
     assert build_question(too_few, []) is None
     assert build_question(quoted, []) is None
+
+
+def test_clean_questions() -> None:
+    assert clean_questions("не список") == []
+    assert clean_questions(
+        [
+            " Почему квадраты? ",
+            "почему квадраты?",
+            42,
+            "",
+            "x" * 200,
+            "Что такое катет?",
+            "Как доказать?",
+            "Чем ромб отличается от квадрата?",
+            "Лишний пятый",
+        ]
+    ) == [
+        "Почему квадраты?",
+        "Что такое катет?",
+        "Как доказать?",
+        "Чем ромб отличается от квадрата?",
+    ]

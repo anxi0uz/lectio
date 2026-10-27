@@ -72,6 +72,10 @@ BGE-M3 многоязычная: русский запрос находит ан
 Подсветка `ts_headline` с предварительным экранированием HTML → фронт рендерит
 `highlight` как HTML.
 
+Подсказки в чате — `suggested_questions` лекции: модель делает их в конце
+`generate_summary` (best effort), иначе `get_summary` строит запасные из
+терминов и оглавления. Старые лекции: `lectio suggest-questions`.
+
 Чат (RAG): 6 фрагментов в промпт, `[n]` → `sources[n-1]`. Потоковый
 `POST /qa/stream` (SSE: `sources`, `delta`*, `done`|`error`); поиск делается
 до старта потока, пока открыта сессия БД.
@@ -86,6 +90,29 @@ bookmarks, search_queries, lecture_likes, comments, quiz_attempts`;
 падает). Размерность 1024 зашита — смена модели эмбеддингов = миграция + `lectio reindex`.
 
 Файлы: `storage/lectures/<id>/{video.*, thumbnail.jpg}`, `storage/avatars/`.
+Ключ в БД (`video_path`, `avatar_path`) — путь относительно `STORAGE_DIR`,
+он же ключ объекта в бакете.
+
+## Хранилище (`core/storage.py`, `core/object_store.py`)
+
+`STORAGE_BACKEND=local|s3`, по умолчанию local. Диск — всегда рабочая
+папка: загрузка, скачивание, ffmpeg, Whisper. В режиме s3 воркер в конце
+обработки переносит видео и превью в бакет (best effort: при сбое файлы
+остаются на диске и работают) и удаляет папку; при переобработке скачивает
+видео обратно. Отдача: локальный файл, если есть, иначе 307 на подписанную
+ссылку (`S3_PUBLIC_ENDPOINT` — адрес, который видит браузер; подпись
+включает хост). Превью для лекции в бакете режется ffmpeg прямо по ссылке.
+Бакет создают API и воркер при старте. `lectio move-storage` переносит
+старые файлы (локальная копия удаляется только после успешной загрузки).
+Клиент — пакет `minio` (синхронный, вызовы в `asyncio.to_thread`).
+
+## Геймификация (`modules/gamification`)
+
+Своих таблиц нет: `collect_activity` считает по пользователям просмотры,
+досмотры, попытки тестов, комментарии, закладки, поиски, лайки, записи.
+XP, уровень (пороги 0/100/300/600…) и ачивки — чистые функции от этих
+счётчиков, поэтому новая ачивка = строка в `ACHIEVEMENTS`. Рейтинг —
+только студенты, только для вошедших (показывает имена).
 
 ## Авторизация и права
 
@@ -121,7 +148,7 @@ react-markdown + KaTeX, lucide. Дизайн «Учебный плакат»: б
 ## Запуск (машина пользователя)
 
 ```bash
-podman compose up -d                         # Postgres + Redis
+podman compose up -d                         # Postgres, Redis, MinIO
 uv run alembic upgrade head
 uv run uvicorn lectio.main:app --reload      # API
 uv run python -m lectio.worker               # воркер (держать запущенным!)
@@ -129,7 +156,7 @@ npm --prefix frontend run dev                # фронт :5173
 ```
 
 В приложении Claude то же самое запускается через `.claude/launch.json`
-(`api`, `web`). Тесты: `podman compose -f compose.test.yaml -p lectio-test up -d`,
+(`api`, `web`; `api-s3` — API с `STORAGE_BACKEND=s3`). Тесты: `podman compose -f compose.test.yaml -p lectio-test up -d`,
 затем `uv run pytest`. Проверки: `uv run ruff check . && uv run ruff format --check .`,
 `uvx --from basedpyright basedpyright --level error src tests`,
 `npm --prefix frontend run typecheck`.

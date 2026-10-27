@@ -22,8 +22,10 @@ from lectio.core.storage import (
     THUMBNAIL_FILENAME,
     ensure_lecture_dir,
     lecture_dir,
+    locate_media,
+    move_to_store,
     remove_lecture_dir,
-    resolve_media_path,
+    remove_lecture_files,
     to_media_path,
 )
 from lectio.models import Lecture, User
@@ -376,7 +378,7 @@ async def delete_lecture(
 
     await db.delete(lecture)
     await db.flush()
-    await asyncio.to_thread(remove_lecture_dir, lecture_id)
+    await remove_lecture_files(lecture_id)
 
     log.info(
         "lecture_deleted",
@@ -385,18 +387,19 @@ async def delete_lecture(
     )
 
 
-def get_video_file(
+async def get_video_source(
     lecture: Lecture,
-) -> tuple[Path, str]:
+) -> tuple[Path | str, str]:
+    """The video's local file, or a signed bucket link, and its media type."""
     if lecture.video_path is None:
         raise VideoNotAvailableError
 
-    path = resolve_media_path(lecture.video_path)
+    source = await locate_media(lecture.video_path)
 
-    if not path.is_file():
+    if source is None:
         raise VideoNotAvailableError
 
-    return path, lecture.video_mime_type or media_type_for(path)
+    return source, lecture.video_mime_type or media_type_for(Path(lecture.video_path))
 
 
 def thumbnail_position(duration: float | None) -> float:
@@ -408,22 +411,32 @@ def thumbnail_position(duration: float | None) -> float:
     return min(max(duration * 0.1, 1.0), 60.0)
 
 
-async def ensure_thumbnail(lecture: Lecture) -> Path:
+async def ensure_thumbnail(lecture: Lecture) -> Path | str:
     """The lecture's preview frame, cut from the video on first request."""
     if lecture.video_mime_type and not lecture.video_mime_type.startswith("video/"):
         raise ThumbnailNotAvailableError
 
-    video, _ = get_video_file(lecture)
     thumbnail = lecture_dir(lecture.id) / THUMBNAIL_FILENAME
 
-    if not thumbnail.is_file():
-        try:
-            await extract_frame(
-                video,
-                thumbnail_position(lecture.duration_seconds),
-                thumbnail,
-            )
-        except MediaCommandError as error:
-            raise ThumbnailNotAvailableError from error
+    if stored := await locate_media(to_media_path(thumbnail)):
+        return stored
+
+    # ffmpeg reads a signed link as well as a file, seeking by ranges.
+    video, _ = await get_video_source(lecture)
+    thumbnail.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        await extract_frame(
+            video,
+            thumbnail_position(lecture.duration_seconds),
+            thumbnail,
+        )
+    except MediaCommandError as error:
+        raise ThumbnailNotAvailableError from error
+
+    # Next to the video in the bucket once processing has moved it there.
+    if isinstance(video, str):
+        await move_to_store(thumbnail)
+        return await locate_media(to_media_path(thumbnail)) or thumbnail
 
     return thumbnail

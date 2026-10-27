@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from lectio.api.dependencies import SessionDep
 from lectio.modules.auth.dependencies import CurrentUserDep
@@ -12,7 +12,7 @@ from lectio.modules.users.schemas import (
     UserUpdate,
 )
 from lectio.modules.users.service import (
-    get_avatar_file,
+    get_avatar_source,
     get_user_by_id,
     remove_avatar,
     set_avatar,
@@ -85,11 +85,14 @@ async def get_user_endpoint(
 async def get_avatar_endpoint(
     user_id: UUID,
     db: SessionDep,
-) -> FileResponse:
+) -> Response:
     """Public, so it can be used directly in <img src>."""
-    path, media_type = await get_avatar_file(db, user_id)
+    source, media_type = await get_avatar_source(db, user_id)
+
+    if isinstance(source, str):
+        return RedirectResponse(source)
 
     return FileResponse(
-        path,
+        source,
         media_type=media_type,
     )

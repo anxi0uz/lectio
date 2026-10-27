@@ -12,9 +12,15 @@ from lectio.core.config import get_settings
 from lectio.core.exceptions import DomainError
 from lectio.core.jobs import Job, JobKind
 from lectio.core.media import probe_media
+from lectio.core.object_store import get_object_store
 from lectio.core.storage import (
     AUDIO_FILENAME,
+    THUMBNAIL_FILENAME,
     ensure_lecture_dir,
+    fetch_media,
+    lecture_dir,
+    move_to_store,
+    remove_lecture_dir,
     resolve_media_path,
     to_media_path,
 )
@@ -156,9 +162,10 @@ async def process_lecture(lecture: Lecture) -> None:
     log.info("processing_started")
 
     directory = ensure_lecture_dir(lecture.id)
-    video_path = resolve_media_path(lecture.video_path) if lecture.video_path else None
+    # A processed lecture's video lives in the bucket; reprocessing needs it here.
+    video_path = await fetch_media(lecture.video_path) if lecture.video_path else None
 
-    if video_path is None or not video_path.is_file():
+    if video_path is None:
         if lecture.source_type != SourceType.URL or not lecture.source_url:
             raise MediaError("Lecture has neither a video file nor a source URL")
 
@@ -190,8 +197,31 @@ async def process_lecture(lecture: Lecture) -> None:
 
     # The transcript is stored; the WAV is only an intermediate artifact.
     audio_path.unlink(missing_ok=True)
+    await _move_files_to_store(lecture.id)
 
     log.info("processing_finished")
+
+
+async def _move_files_to_store(lecture_id: UUID) -> None:
+    """Best effort: if the bucket is down, the local files keep working and
+    the next processing tries again."""
+    if get_object_store() is None:
+        return
+
+    lecture = await load_lecture(lecture_id)
+    if lecture is None:
+        raise LectureGoneError
+
+    try:
+        if lecture.video_path:
+            await move_to_store(resolve_media_path(lecture.video_path))
+        await move_to_store(lecture_dir(lecture_id) / THUMBNAIL_FILENAME)
+    except Exception:
+        log.exception("move_to_store_failed")
+        return
+
+    # What is left are leftovers such as partial downloads.
+    await asyncio.to_thread(remove_lecture_dir, lecture_id)
 
 
 async def _download(

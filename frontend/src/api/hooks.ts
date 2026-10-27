@@ -15,9 +15,11 @@ import type {
   Course,
   Dashboard,
   EnrolledCourse,
+  Leaderboard,
   Lecture,
   LectureState,
   LectureStats,
+  MyAchievements,
   Progress,
   Quiz,
   QuizAttempt,
@@ -451,5 +453,27 @@ export function saveProgress(
   return api<Progress>(`/lectures/${lectureId}/progress`, {
     method: 'PUT',
     body: { position_seconds: positionSeconds, completed },
+  });
+}
+
+/* ---------- gamification ---------- */
+
+export function useMyAchievements() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['achievements', user?.id],
+    queryFn: () => api<MyAchievements>('/me/achievements'),
+    enabled: !!user,
+  });
+}
+
+export function useLeaderboard() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['leaderboard', user?.id],
+    queryFn: () => api<Leaderboard>('/leaderboard'),
+    enabled: !!user,
   });
 }

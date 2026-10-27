@@ -1,6 +1,6 @@
 import bisect
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import structlog
 from pydantic import ValidationError
@@ -10,6 +10,7 @@ from lectio.models import Chunk
 from lectio.modules.summaries.prompts import (
     OUTLINE_SYSTEM,
     PART_SYSTEM,
+    QUESTIONS_SYSTEM,
     SUMMARY_SYSTEM,
 )
 from lectio.modules.summaries.schemas import (
@@ -25,6 +26,8 @@ log = structlog.get_logger(
 
 MAX_KEY_TERMS = 20
 PART_ATTEMPTS = 2
+MAX_QUESTIONS = 4
+MAX_QUESTION_CHARS = 120
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +35,7 @@ class GeneratedSummary:
     summary: str
     sections: list[OutlineSection]
     key_terms: list[KeyTerm]
+    questions: list[str] = field(default_factory=list)
 
 
 def split_into_parts(
@@ -115,14 +119,60 @@ async def generate_summary(
     sections = await _merge_outline(llm, draft) if len(digests) > 1 else draft
     report(total_steps)
 
+    key_terms = locate_terms(
+        [term for digest in digests for term in digest.terms],
+        chunks,
+    )
+
     return GeneratedSummary(
         summary=summary,
         sections=normalize_outline(sections, known_starts),
-        key_terms=locate_terms(
-            [term for digest in digests for term in digest.terms],
-            chunks,
-        ),
+        key_terms=key_terms,
+        questions=await suggest_questions(llm, title, summary, key_terms),
     )
+
+
+def clean_questions(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+
+    questions: list[str] = []
+    seen: set[str] = set()
+
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+
+        question = item.strip()
+        key = question.casefold()
+
+        if not question or len(question) > MAX_QUESTION_CHARS or key in seen:
+            continue
+
+        seen.add(key)
+        questions.append(question)
+
+    return questions[:MAX_QUESTIONS]
+
+
+async def suggest_questions(
+    llm: LLMClient,
+    title: str,
+    summary: str,
+    terms: Sequence[KeyTerm],
+) -> list[str]:
+    """Best effort: without them the chat falls back to terms and contents."""
+    prompt = f"Лекция «{title}».\n\nКонспект:\n{summary}\n\nТермины: " + ", ".join(
+        term.term for term in terms
+    )
+
+    try:
+        payload = await llm.complete_json(QUESTIONS_SYSTEM, prompt)
+    except LLMUnavailableError as error:
+        log.warning("questions_failed", error=str(error))
+        return []
+
+    return clean_questions(payload.get("questions"))
 
 
 async def _digest_part(

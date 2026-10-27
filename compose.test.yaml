@@ -37,3 +37,25 @@ services:
       interval: 2s
       timeout: 5s
       retries: 15
+
+  minio-test:
+    image: docker.io/pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command:
+      - server
+      - /data
+    environment:
+      MINIO_ROOT_USER: lectio
+      MINIO_ROOT_PASSWORD: lectio-secret
+    ports:
+      - "127.0.0.1:${TEST_MINIO_PORT:-9002}:9000"
+    tmpfs:
+      - /data
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fs
+        - http://127.0.0.1:9000/minio/health/live
+      interval: 2s
+      timeout: 5s
+      retries: 15

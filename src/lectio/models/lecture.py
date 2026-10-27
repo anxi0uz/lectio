@@ -129,6 +129,13 @@ class Lecture(Base):
         server_default="[]",
     )
 
+    # Questions to the chat assistant shown before the first message.
+    suggested_questions: Mapped[list[str]] = mapped_column(
+        JSONB,
+        default=list,
+        server_default="[]",
+    )
+
     quiz: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB,
         default=list,

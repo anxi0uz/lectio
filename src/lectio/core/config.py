@@ -33,7 +33,20 @@ class Settings(BaseSettings):
     register_rate_limit_per_ip: int = 10
     register_rate_limit_window_seconds: int = 60 * 60
 
+    # Local working directory: uploads, downloads and processing happen here.
+    # With the s3 backend, finished files move to the bucket.
     storage_dir: Path = Path("storage")
+    storage_backend: Literal["local", "s3"] = "local"
+    s3_endpoint: str = "http://localhost:9000"
+    # Where browsers reach the bucket; signed links are made for this host.
+    s3_public_endpoint: str | None = None
+    s3_access_key: str = "lectio"
+    s3_secret_key: str = "lectio-secret"
+    s3_bucket: str = "lectio"
+    # Fixed so signing never asks the server for the bucket's region.
+    s3_region: str = "us-east-1"
+    # Long enough to watch a lecture: the player keeps requesting ranges.
+    s3_url_ttl_seconds: int = 6 * 60 * 60
     max_upload_mb: int = 4096
     max_duration_hours: float = 4.0
     url_probe_timeout_seconds: float = 30.0

@@ -11,6 +11,7 @@ from lectio.api.middleware import RequestLoggingMiddleware
 from lectio.api.router import api_router
 from lectio.core.config import get_settings
 from lectio.core.logger import configure_logging
+from lectio.core.object_store import get_object_store
 from lectio.db.redis import close_redis
 from lectio.db.session import dispose_engine
 from lectio.ml.embedder import get_query_embedder
@@ -24,6 +25,9 @@ log = structlog.get_logger()
 async def lifespan(
     app: FastAPI,
 ) -> AsyncGenerator[None]:
+    if store := get_object_store():
+        await store.ensure_bucket()
+
     if get_settings().preload_models:
         await asyncio.to_thread(get_query_embedder)
         await asyncio.to_thread(get_reranker)

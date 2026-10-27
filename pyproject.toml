@@ -9,6 +9,7 @@ dependencies = [
     "fastapi[standard]>=0.162.0",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
+    "minio>=7.2.20",
     "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "numpy>=2.5.4",
     "openai>=3.37.0",

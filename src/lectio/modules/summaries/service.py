@@ -50,6 +50,7 @@ async def save_summary(
     lecture.summary = generated.summary
     lecture.summary_error = None
     lecture.key_terms = [term.model_dump() for term in generated.key_terms]
+    lecture.suggested_questions = generated.questions
 
     await db.flush()
 
@@ -76,14 +77,39 @@ async def get_summary(
         else:
             tree.append(item)
 
+    key_terms = [KeyTerm.model_validate(term) for term in lecture.key_terms]
+
     return SummaryResponse(
         lecture_id=lecture.id,
         status=lecture.status,
         summary=lecture.summary,
         error=lecture.summary_error,
         chapters=tree,
-        key_terms=[KeyTerm.model_validate(term) for term in lecture.key_terms],
+        key_terms=key_terms,
+        suggested_questions=(
+            lecture.suggested_questions or fallback_questions(tree, key_terms)
+        ),
     )
+
+
+def fallback_questions(
+    chapters: list[ChapterResponse],
+    terms: list[KeyTerm],
+) -> list[str]:
+    """Questions from the lecture's own terms and contents, for lectures
+    summarized before questions were generated or when the model failed."""
+    if not chapters and not terms:
+        return []
+
+    questions = [f"Что такое «{term.term}»?" for term in terms[:2]]
+
+    # The first section is usually the introduction.
+    if len(chapters) > 1:
+        questions.append(f"Объясни подробнее: {chapters[1].title}")
+
+    questions.append("Какие главные выводы этой лекции?")
+
+    return questions
 
 
 async def start_resummarize(

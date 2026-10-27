@@ -11,7 +11,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from lectio.api.dependencies import RedisDep, SessionDep
 from lectio.core.jobs import JobKind, enqueue_job
@@ -30,7 +30,7 @@ from lectio.modules.lectures.service import (
     delete_lecture,
     ensure_thumbnail,
     get_lecture_by_id,
-    get_video_file,
+    get_video_source,
     list_lectures,
     restart_processing,
     update_lecture,
@@ -211,18 +211,23 @@ async def delete_lecture_endpoint(
     responses={
         200: {"content": {"video/mp4": {}}},
         206: {"description": "Partial content for a Range request"},
+        307: {"description": "Signed link to the video in the bucket"},
     },
 )
 async def get_video_endpoint(
     lecture_id: UUID,
     db: SessionDep,
-) -> FileResponse:
+) -> Response:
     lecture = await get_lecture_by_id(db, lecture_id)
-    path, media_type = get_video_file(lecture)
+    source, media_type = await get_video_source(lecture)
+
+    if isinstance(source, str):
+        # The bucket answers Range requests itself; players follow redirects.
+        return RedirectResponse(source)
 
     # FileResponse answers Range requests, which players need for seeking.
     return FileResponse(
-        path,
+        source,
         media_type=media_type,
     )
 
@@ -235,13 +240,20 @@ async def get_video_endpoint(
 async def get_thumbnail_endpoint(
     lecture_id: UUID,
     db: SessionDep,
-) -> FileResponse:
+) -> Response:
     """Preview frame for lecture cards; 404 for audio-only lectures."""
     lecture = await get_lecture_by_id(db, lecture_id)
-    path = await ensure_thumbnail(lecture)
+    source = await ensure_thumbnail(lecture)
+
+    if isinstance(source, str):
+        # Signed links expire, so the redirect is cached for a short while.
+        return RedirectResponse(
+            source,
+            headers={"Cache-Control": "private, max-age=600"},
+        )
 
     return FileResponse(
-        path,
+        source,
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )

@@ -13,6 +13,7 @@ import { CoursePage } from './pages/CoursePage';
 import { CoursesPage } from './pages/CoursesPage';
 import { FavoritesPage } from './pages/FavoritesPage';
 import { HomePage } from './pages/HomePage';
+import { LeaderboardPage } from './pages/LeaderboardPage';
 import { LecturePage } from './pages/lecture/LecturePage';
 import { LecturesPage } from './pages/LecturesPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -86,6 +87,7 @@ export function App() {
                 <Route path="favorites" element={<RequireAuth><FavoritesPage /></RequireAuth>} />
                 <Route path="bookmarks" element={<RequireAuth><BookmarksPage /></RequireAuth>} />
                 <Route path="profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+                <Route path="leaderboard" element={<RequireAuth><LeaderboardPage /></RequireAuth>} />
                 <Route path="upload" element={<RequireAuth teacher><UploadPage /></RequireAuth>} />
                 <Route path="*" element={<NotFound />} />
               </Route>

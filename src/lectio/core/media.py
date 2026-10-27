@@ -86,7 +86,7 @@ async def probe_media(path: Path) -> MediaInfo | None:
 
 
 async def extract_frame(
-    video: Path,
+    video: Path | str,
     at_seconds: float,
     output: Path,
     width: int = 640,

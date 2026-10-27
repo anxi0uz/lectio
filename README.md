@@ -121,7 +121,7 @@ src/lectio/
 
 ```bash
 cp .env.example .env
-podman compose up -d                  # PostgreSQL + Redis
+podman compose up -d                  # PostgreSQL, Redis, MinIO
 uv sync
 uv run alembic upgrade head
 ollama pull qwen3:4b-instruct
@@ -179,6 +179,25 @@ Whisper работает через MLX, эмбеддинги — через MPS
 
 Чтобы Ollama принимала длинные части расшифровки, поднимите контекст:
 `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`.
+
+### Хранилище видео
+
+По умолчанию (`STORAGE_BACKEND=local`) видео, превью и аватары лежат в
+`STORAGE_DIR`. С `STORAGE_BACKEND=s3` готовые файлы уезжают в бакет
+S3-совместимого хранилища (MinIO из `compose.yaml`, консоль —
+http://localhost:9001), а API отвечает редиректом на подписанную ссылку:
+перемотку видео отдаёт сам бакет. Пока лекция обрабатывается, видео
+отдаётся с диска; после обработки воркер переносит его в бакет и чистит
+локальную папку.
+
+Перенести уже обработанные лекции и аватары с диска в бакет:
+
+```bash
+STORAGE_BACKEND=s3 uv run lectio move-storage
+```
+
+Официальные образы MinIO больше не публикуются, в compose — поддерживаемая
+сообществом сборка `pgsty/minio`; подойдёт любое S3-хранилище.
 
 ### Полностью в контейнерах
 
@@ -309,7 +328,7 @@ podman compose -f compose.test.yaml up -d
 uv run pytest
 ```
 
-Интеграционные тесты используют настоящие PostgreSQL с pgvector и Redis, а
+Интеграционные тесты используют настоящие PostgreSQL с pgvector, Redis и MinIO, а
 модели заменены детерминированными заглушками — скачивать ничего не нужно.
 
 ```bash

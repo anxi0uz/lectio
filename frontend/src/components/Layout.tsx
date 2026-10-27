@@ -81,6 +81,7 @@ function Header() {
           <NavItem to="/lectures" label="Лекции" />
           {user && <NavItem to="/bookmarks" label="Мои заметки" />}
           {user && <NavItem to="/favorites" label="Избранное" />}
+          {user && <NavItem to="/leaderboard" label="Рейтинг" />}
           {isTeacher && <NavItem to="/upload" label="Загрузить" />}
         </nav>
 

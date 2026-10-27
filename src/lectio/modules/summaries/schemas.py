@@ -28,6 +28,8 @@ class SummaryResponse(BaseModel):
     error: str | None
     chapters: list[ChapterResponse]
     key_terms: list[KeyTerm]
+    # Generated for this lecture, or built from its terms and contents.
+    suggested_questions: list[str]
 
 
 class _OutlineItem(BaseModel):

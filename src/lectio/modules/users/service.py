@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 from uuid import UUID
 
@@ -8,7 +7,13 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lectio.core.config import get_settings
-from lectio.core.storage import avatars_dir, resolve_media_path, to_media_path
+from lectio.core.storage import (
+    avatars_dir,
+    locate_media,
+    move_to_store,
+    remove_media_prefix,
+    to_media_path,
+)
 from lectio.models import User
 from lectio.modules.users.exceptions import (
     AvatarNotFoundError,
@@ -84,9 +89,12 @@ async def update_user(
     return user
 
 
-def _remove_avatar_files(user_id: UUID) -> None:
+async def _remove_avatar_files(user_id: UUID) -> None:
     for path in avatars_dir().glob(f"{user_id}.*"):
         path.unlink(missing_ok=True)
+
+    # The extension may change between uploads, so match any of them.
+    await remove_media_prefix(f"{to_media_path(avatars_dir())}/{user_id}.")
 
 
 async def set_avatar(
@@ -107,10 +115,11 @@ async def set_avatar(
     if suffix is None:
         raise InvalidAvatarError
 
-    await asyncio.to_thread(_remove_avatar_files, user.id)
+    await _remove_avatar_files(user.id)
 
     destination = avatars_dir() / f"{user.id}{suffix}"
     await anyio.Path(destination).write_bytes(content)
+    await move_to_store(destination)
 
     user.avatar_path = to_media_path(destination)
 
@@ -130,24 +139,25 @@ async def remove_avatar(
     db: AsyncSession,
     user: User,
 ) -> None:
-    await asyncio.to_thread(_remove_avatar_files, user.id)
+    await _remove_avatar_files(user.id)
 
     user.avatar_path = None
     await db.flush()
 
 
-async def get_avatar_file(
+async def get_avatar_source(
     db: AsyncSession,
     user_id: UUID,
-) -> tuple[Path, str]:
+) -> tuple[Path | str, str]:
+    """The avatar's local file or signed bucket link, and its media type."""
     user = await get_user_by_id(db, user_id)
 
     if user.avatar_path is None:
         raise AvatarNotFoundError
 
-    path = resolve_media_path(user.avatar_path)
+    source = await locate_media(user.avatar_path)
 
-    if not path.is_file():
+    if source is None:
         raise AvatarNotFoundError
 
-    return path, AVATAR_MEDIA_TYPES[path.suffix]
+    return source, AVATAR_MEDIA_TYPES[Path(user.avatar_path).suffix]

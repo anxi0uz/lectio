@@ -2,9 +2,10 @@ import { ArrowRight, Compass } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
-import { useCourses, useDashboard, useLectures, useMyCourses } from '../api/hooks';
+import { useCourses, useDashboard, useLectures, useMyAchievements, useMyCourses } from '../api/hooks';
 import { useAuth } from '../auth/AuthProvider';
 import { CourseCard } from '../components/CourseCard';
+import { LevelBar, achievementsCount } from '../components/Gamification';
 import { LectureCard } from '../components/LectureCard';
 import { Empty, Skeleton } from '../components/ui';
 
@@ -73,6 +74,7 @@ function watchedTime(seconds: number) {
 function Dashboard() {
   const { user } = useAuth();
   const { data: dashboard } = useDashboard();
+  const { data: achievements } = useMyAchievements();
   const { data: myCourses } = useMyCourses();
   const { data: recent = [] } = useLectures();
   const navigate = useNavigate();
@@ -99,6 +101,15 @@ function Dashboard() {
           <span className="stat-label">заметок на таймкодах</span>
         </div>
       </div>
+
+      {achievements && (
+        <Link to="/leaderboard" className="home-level">
+          <LevelBar level={achievements.level} />
+          <span className="home-level-link">
+            {achievementsCount(achievements.achievements.filter((item) => item.unlocked).length)} · рейтинг →
+          </span>
+        </Link>
+      )}
 
       {!!dashboard?.continue_watching.length && (
         <section className="card-pad">

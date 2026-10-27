@@ -131,6 +131,7 @@ export interface Summary {
   error: string | null;
   chapters: Chapter[];
   key_terms: KeyTerm[];
+  suggested_questions: string[];
 }
 
 export interface SearchHit {
@@ -226,4 +227,38 @@ export interface Comment {
   text: string;
   position_seconds: number | null;
   created_at: string;
+}
+
+export interface Level {
+  xp: number;
+  level: number;
+  /** XP at which the current level started and the next one begins. */
+  level_xp: number;
+  next_level_xp: number;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  progress: number;
+  target: number;
+  unlocked: boolean;
+}
+
+export interface MyAchievements {
+  level: Level;
+  achievements: Achievement[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  user: PublicUser;
+  level: Level;
+  achievements: number;
+}
+
+export interface Leaderboard {
+  top: LeaderboardEntry[];
+  me: LeaderboardEntry | null;
 }

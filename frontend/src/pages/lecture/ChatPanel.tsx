@@ -7,7 +7,8 @@ import { timecode } from '../../lib/format';
 
 type Turn = ChatMessage & { sources?: SearchHit[]; error?: boolean; streaming?: boolean };
 
-const SUGGESTIONS = [
+/** Until the lecture has its own questions (no summary yet). */
+const GENERIC_SUGGESTIONS = [
   'О чём эта лекция в двух словах?',
   'Какие определения здесь даются?',
   'Объясни самое сложное место попроще',
@@ -28,11 +29,14 @@ export function ChatPanel({
   lectureId,
   enabled,
   chapters,
+  suggestions,
   onOpenSource,
 }: {
   lectureId: string;
   enabled: boolean;
   chapters: Chapter[];
+  /** Questions about this lecture, from its summary. */
+  suggestions: string[];
   onOpenSource: (hit: SearchHit) => void;
 }) {
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -173,7 +177,7 @@ export function ChatPanel({
 
             {!turns.length && (
               <div className="suggestions">
-                {SUGGESTIONS.map((text) => (
+                {(suggestions.length ? suggestions : GENERIC_SUGGESTIONS).map((text) => (
                   <button key={text} onClick={() => void send(text)}>
                     {text}
                   </button>

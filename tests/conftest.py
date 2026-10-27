@@ -1,5 +1,6 @@
 import os
 import tempfile
+from uuid import uuid4
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -11,6 +12,11 @@ TEST_REDIS_URL = os.getenv(
     "redis://127.0.0.1:6380/0",
 )
 
+TEST_S3_ENDPOINT = os.getenv(
+    "TEST_S3_ENDPOINT",
+    "http://127.0.0.1:9002",
+)
+
 # Settings are read lazily, so pinning the environment before the app is
 # imported is enough. Assigned unconditionally, not setdefault: an exported
 # DATABASE_URL pointing at a dev database must never be truncated by tests.
@@ -19,6 +25,8 @@ os.environ.update(
         "DATABASE_URL": TEST_DATABASE_URL,
         "REDIS_URL": TEST_REDIS_URL,
         "STORAGE_DIR": tempfile.mkdtemp(prefix="lectio-test-"),
+        # The object_store fixture switches to the bucket where a test needs it.
+        "STORAGE_BACKEND": "local",
         "JWT_SECRET": "test-jwt-secret-that-is-at-least-32-characters",
         "REFRESH_COOKIE_SECURE": "false",
         "MAX_UPLOAD_MB": "1",
@@ -39,6 +47,8 @@ from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession  # noqa: E402
 
 import lectio.models  # noqa: E402, F401
+from lectio.core.config import get_settings  # noqa: E402
+from lectio.core.object_store import ObjectStore, get_object_store  # noqa: E402
 from lectio.db.base import Base  # noqa: E402
 from lectio.db.redis import close_redis, get_redis_client  # noqa: E402
 from lectio.db.session import (  # noqa: E402
@@ -196,3 +206,35 @@ async def student(
     register_user: RegisterUser,
 ) -> RegisteredUser:
     return await register_user("student@example.com")
+
+
+@pytest.fixture
+async def object_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[ObjectStore]:
+    """Switch the app to the bucket backend on the test MinIO."""
+    bucket = f"test-{uuid4().hex[:12]}"
+
+    for name, value in {
+        "STORAGE_BACKEND": "s3",
+        "S3_ENDPOINT": TEST_S3_ENDPOINT,
+        "S3_BUCKET": bucket,
+        "S3_ACCESS_KEY": "lectio",
+        "S3_SECRET_KEY": "lectio-secret",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+    get_settings.cache_clear()
+    get_object_store.cache_clear()
+
+    store = get_object_store()
+    assert store is not None
+    await store.ensure_bucket()
+
+    try:
+        yield store
+    finally:
+        await store.delete_prefix("")
+        monkeypatch.undo()
+        get_settings.cache_clear()
+        get_object_store.cache_clear()

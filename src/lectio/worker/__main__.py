@@ -6,6 +6,7 @@ from sqlalchemy import select
 from lectio.core.config import get_settings
 from lectio.core.jobs import JobKind, dequeue_job, enqueue_job
 from lectio.core.logger import configure_logging
+from lectio.core.object_store import get_object_store
 from lectio.db.redis import close_redis, get_redis_client
 from lectio.db.session import dispose_engine, get_session_factory
 from lectio.ml.llm import close_llm
@@ -48,6 +49,9 @@ async def requeue_unfinished() -> None:
 
 async def main() -> None:
     configure_logging(get_settings().debug)
+
+    if store := get_object_store():
+        await store.ensure_bucket()
 
     await requeue_unfinished()
 
