@@ -72,3 +72,6 @@ async def test_summary_tree_and_regeneration(
 
     assert regenerate.status_code == 202
     assert await test_redis.llen(JOBS_QUEUE_KEY) == 1  # pyright: ignore[reportGeneralTypeIssues]
+    # Busy right away, so clients poll until the worker is done.
+    assert (await client.get(url)).json()["status"] == "summarizing"
+    assert (await client.post(url, headers=teacher.headers)).status_code == 409

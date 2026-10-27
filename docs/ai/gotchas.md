@@ -40,6 +40,14 @@
 - **`systemctl edit` в nano**: Ctrl+O требует Enter, иначе ничего не сохранится.
   Надёжнее `printf … | sudo tee …/override.conf` + `daemon-reload`.
 
+## Фронт
+
+- **Глобально `refetchOnWindowFocus: false`** (`App.tsx`), а опрос по
+  умолчанию спит в фоновой вкладке → страница «не обновлялась». У лекции
+  `refetchIntervalInBackground: true` и инвалидация по смене статуса в
+  `useLecture`. Любое новое действие, ставящее задачу воркеру, должно сразу
+  менять статус лекции в API, иначе фронт не начнёт опрос.
+
 ## Библиотеки
 
 - redis-py 8: socket timeout 5 с → BRPOP с таймаутом ≥5 падает. У нас 2 с.

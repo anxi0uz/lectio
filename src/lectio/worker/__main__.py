@@ -10,7 +10,7 @@ from lectio.db.redis import close_redis, get_redis_client
 from lectio.db.session import dispose_engine, get_session_factory
 from lectio.ml.llm import close_llm
 from lectio.models import Lecture
-from lectio.models.enums import IN_PROGRESS_STATUSES
+from lectio.models.enums import IN_PROGRESS_STATUSES, LectureStatus
 from lectio.worker.pipeline import run_job
 
 log = structlog.get_logger(
@@ -24,21 +24,26 @@ async def requeue_unfinished() -> None:
     Duplicates are harmless: a job for a finished lecture is skipped.
     """
     async with get_session_factory()() as db:
-        lecture_ids = list(
-            (
-                await db.scalars(
-                    select(Lecture.id)
-                    .where(Lecture.status.in_(IN_PROGRESS_STATUSES))
-                    .order_by(Lecture.created_at.asc())
-                )
-            ).all()
+        rows = (
+            await db.execute(
+                select(Lecture.id, Lecture.status)
+                .where(Lecture.status.in_(IN_PROGRESS_STATUSES))
+                .order_by(Lecture.created_at.asc())
+            )
+        ).all()
+
+    for lecture_id, status in rows:
+        # Summarizing comes after indexing: the transcript is already stored,
+        # so only the summary has to be redone.
+        kind = (
+            JobKind.SUMMARIZE
+            if status == LectureStatus.SUMMARIZING
+            else JobKind.PROCESS
         )
+        await enqueue_job(get_redis_client(), kind, lecture_id)
 
-    for lecture_id in lecture_ids:
-        await enqueue_job(get_redis_client(), JobKind.PROCESS, lecture_id)
-
-    if lecture_ids:
-        log.info("unfinished_lectures_requeued", count=len(lecture_ids))
+    if rows:
+        log.info("unfinished_lectures_requeued", count=len(rows))
 
 
 async def main() -> None:

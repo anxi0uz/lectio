@@ -86,7 +86,7 @@ async def get_summary(
     )
 
 
-async def ensure_can_resummarize(
+async def start_resummarize(
     db: AsyncSession,
     lecture_id: UUID,
     user: User,
@@ -95,5 +95,11 @@ async def ensure_can_resummarize(
 
     if lecture.status != LectureStatus.READY:
         raise SummaryNotReadyError
+
+    # Marked before the job runs, so clients see the lecture as busy and
+    # keep polling even while the worker is still on another lecture.
+    lecture.status = LectureStatus.SUMMARIZING
+    lecture.progress = 0.0
+    await db.flush()
 
     return lecture

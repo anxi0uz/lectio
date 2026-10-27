@@ -345,7 +345,8 @@ async def _summarize(lecture: Lecture) -> None:
 
 
 async def resummarize_lecture(lecture: Lecture) -> None:
-    if lecture.status != LectureStatus.READY:
+    # The API marks the lecture as summarizing; the CLI queues ready ones.
+    if lecture.status not in {LectureStatus.READY, LectureStatus.SUMMARIZING}:
         log.info("job_skipped", status=lecture.status.value)
         return
 

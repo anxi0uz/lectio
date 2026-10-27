@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 
 import { useAuth } from '../auth/AuthProvider';
 import { ApiError, api, refreshSession, uploadWithProgress } from './client';
@@ -60,12 +61,34 @@ export function useLectures(params: { courseId?: string; ownerId?: string } = {}
 }
 
 export function useLecture(id: string | undefined) {
-  return useQuery({
+  const client = useQueryClient();
+  const query = useQuery({
     queryKey: ['lecture', id],
     queryFn: () => api<Lecture>(`/lectures/${id}`),
     enabled: !!id,
     refetchInterval: (query) => (isProcessing(query.state.data) ? 2000 : false),
+    // People switch tabs while a lecture is processed for minutes.
+    refetchIntervalInBackground: true,
   });
+  const status = query.data?.status;
+  const previous = useRef(status);
+
+  // Each stage brings new data: the transcript after indexing, the summary
+  // and contents when it is ready, a fresh transcript after reprocessing.
+  useEffect(() => {
+    if (!id || !status || previous.current === status) return;
+
+    const first = previous.current === undefined;
+    previous.current = status;
+    if (first) return;
+
+    for (const key of ['segments', 'summary', 'quiz', 'lecture-stats']) {
+      client.invalidateQueries({ queryKey: [key, id] });
+    }
+    client.invalidateQueries({ queryKey: ['lectures'] });
+  }, [client, id, status]);
+
+  return query;
 }
 
 export function useSegments(lecture: Lecture | undefined) {
@@ -79,7 +102,7 @@ export function useSegments(lecture: Lecture | undefined) {
 
 export function useSummary(lecture: Lecture | undefined) {
   return useQuery({
-    queryKey: ['summary', lecture?.id, lecture?.status],
+    queryKey: ['summary', lecture?.id],
     queryFn: () => api<Summary>(`/lectures/${lecture!.id}/summary`),
     enabled: isSearchable(lecture),
   });

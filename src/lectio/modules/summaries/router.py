@@ -7,8 +7,8 @@ from lectio.core.jobs import JobKind, enqueue_job
 from lectio.modules.auth.dependencies import CurrentUserDep
 from lectio.modules.summaries.schemas import SummaryResponse
 from lectio.modules.summaries.service import (
-    ensure_can_resummarize,
     get_summary,
+    start_resummarize,
 )
 
 router = APIRouter(
@@ -40,7 +40,7 @@ async def regenerate_summary_endpoint(
     redis: RedisDep,
     background_tasks: BackgroundTasks,
 ) -> None:
-    await ensure_can_resummarize(db, lecture_id, current_user)
+    await start_resummarize(db, lecture_id, current_user)
 
     background_tasks.add_task(
         enqueue_job,
