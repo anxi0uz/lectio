@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,41 @@ async def probe_media(path: Path) -> MediaInfo | None:
         has_audio="audio" in kinds,
         has_video=has_video,
     )
+
+
+async def extract_frame(
+    video: Path,
+    at_seconds: float,
+    output: Path,
+    width: int = 640,
+) -> None:
+    """Save one frame as a JPEG. Written aside and renamed, so a reader
+    never sees a half-written file."""
+    partial = output.with_name(f".{output.stem}-{os.getpid()}{output.suffix}")
+
+    try:
+        await run_command(
+            "ffmpeg",
+            "-nostdin",
+            "-y",
+            "-loglevel",
+            "error",
+            # -ss before -i seeks by keyframes: fast even deep into a long file.
+            "-ss",
+            f"{at_seconds:.2f}",
+            "-i",
+            str(video),
+            "-frames:v",
+            "1",
+            "-vf",
+            f"scale={width}:-2",
+            "-q:v",
+            "4",
+            str(partial),
+        )
+        os.replace(partial, output)
+    finally:
+        partial.unlink(missing_ok=True)
 
 
 def probe_url(url: str) -> RemoteVideo:

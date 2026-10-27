@@ -19,6 +19,10 @@ class VideoNotAvailableError(NotFoundError):
     default_detail = "Video file is not available yet"
 
 
+class ThumbnailNotAvailableError(NotFoundError):
+    default_detail = "Lecture has no video frame to show"
+
+
 class UnsupportedMediaError(DomainError):
     status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
     default_detail = "Unsupported file type"

@@ -1,5 +1,7 @@
 # Prototype Instructions
 
+> Общий контекст проекта — в `../docs/ai/`, правила для агентов — в `../AGENTS.md`. Дизайн фронта сейчас «Учебный плакат», а не Mentora: см. `../docs/ai/architecture.md`.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

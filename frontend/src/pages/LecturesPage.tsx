@@ -28,7 +28,7 @@ export function LecturesPage() {
 
   return (
     <div className="page">
-      <section className="card page-header">
+      <section className="page-header">
         <div>
           <div className="eyebrow">Библиотека</div>
           <h1>Все лекции</h1>

@@ -1,4 +1,4 @@
-import { Search, Sparkles } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
@@ -38,18 +38,20 @@ export function SearchPage() {
 
   return (
     <div className="page">
-      <section className="card page-header" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <section className="page-header" style={{ gridTemplateColumns: '1fr' }}>
         <div>
           <div className="eyebrow">Умный поиск</div>
-          <h1>Поиск по смыслу во всех лекциях</h1>
+          <h1>
+            Поиск <span className="accent">по смыслу</span> во всех лекциях
+          </h1>
           <p>Формулируйте как угодно — найдём фрагмент, даже если в лекции говорили другими словами или на другом языке.</p>
         </div>
-        <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
           <div style={{ position: 'relative', flex: '1 1 320px' }}>
-            <Search size={17} className="muted" style={{ position: 'absolute', left: 14, top: 13 }} />
+            <Search size={17} className="muted" style={{ position: 'absolute', left: 14, top: 17 }} />
             <input
               className="input"
-              style={{ paddingLeft: 40, height: 44 }}
+              style={{ paddingLeft: 42, height: 52, fontSize: 17 }}
               placeholder="Например: «зачем строить квадрат со стороной a + b»"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -58,7 +60,7 @@ export function SearchPage() {
           </div>
           <select
             className="select"
-            style={{ flex: '0 1 220px', height: 44 }}
+            style={{ flex: '0 1 240px', height: 52 }}
             value={courseId}
             onChange={(e) => run(draft, e.target.value)}
           >
@@ -69,32 +71,32 @@ export function SearchPage() {
               </option>
             ))}
           </select>
-          <button className="btn btn-primary" style={{ height: 44 }}>
+          <button className="btn btn-accent" style={{ height: 52 }}>
             Найти
           </button>
         </form>
       </section>
 
-      <section className="card" style={{ padding: 8 }}>
+      <section>
         {!query ? (
-          <div className="card-pad">
-            <h3 style={{ marginBottom: 12 }}>Попробуйте</h3>
+          <div className="card card-pad">
+            <h3 className="label" style={{ marginBottom: 16 }}>{history.length ? 'Вы искали' : 'Попробуйте'}</h3>
             <div className="chips">
               {(history.length ? history.map((h) => h.query) : EXAMPLES).map((text) => (
                 <button key={text} className="chip" onClick={() => run(text)}>
-                  <Sparkles size={13} /> {text}
+                  {text}
                 </button>
               ))}
             </div>
           </div>
         ) : results.isLoading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 24 }}>
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} height={84} />
             ))}
           </div>
         ) : results.error ? (
-          <div className="alert alert-error" style={{ margin: 16 }}>{results.error.message}</div>
+          <div className="alert alert-error">{results.error.message}</div>
         ) : results.data?.length ? (
           <div style={{ opacity: results.isFetching ? 0.6 : 1, transition: 'opacity 0.2s' }}>
             {results.data.map((hit) => (
@@ -103,16 +105,16 @@ export function SearchPage() {
                 to={`/lectures/${hit.lecture_id}?t=${Math.floor(hit.start_seconds)}`}
                 className="search-result"
               >
-                <span className="search-result-head">
-                  <span className="time-chip">▶ {timecode(hit.start_seconds)}</span>
-                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{hit.lecture_title}</span>
+                <span className="search-result-time">{timecode(hit.start_seconds)}</span>
+                <span>
+                  <span className="search-result-title">{hit.lecture_title}</span>
+                  <span className="search-result-text" style={{ display: 'block' }} dangerouslySetInnerHTML={{ __html: hit.highlight }} />
                 </span>
-                <span className="search-result-text" dangerouslySetInnerHTML={{ __html: hit.highlight }} />
               </Link>
             ))}
           </div>
         ) : (
-          <Empty icon={<Search size={22} />} title="Ничего не нашлось">
+          <Empty icon={<Search size={24} />} title="Ничего не нашлось">
             Попробуйте переформулировать запрос или искать во всех курсах.
           </Empty>
         )}

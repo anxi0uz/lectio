@@ -1,4 +1,4 @@
-import { ArrowRight, BookMarked, CheckCircle2, Clock, Compass, History, PlayCircle, Search } from 'lucide-react';
+import { ArrowRight, Compass } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
@@ -8,7 +8,7 @@ import { CourseCard } from '../components/CourseCard';
 import { LectureCard } from '../components/LectureCard';
 import { Empty, Skeleton } from '../components/ui';
 
-const HINTS = ['объяснение теоремы Пифагора', 'что такое производная', 'пример с площадями'];
+const HINTS = ['объяснение теоремы Пифагора', 'как учиться с помощью AI', 'зачем строить квадрат a + b'];
 
 function Hero({ name }: { name?: string }) {
   const navigate = useNavigate();
@@ -21,24 +21,25 @@ function Hero({ name }: { name?: string }) {
   };
 
   return (
-    <section className="card hero">
-      <div className="eyebrow" style={{ color: 'rgb(255 255 255 / 0.6)' }}>
-        {name ? `С возвращением, ${name}` : 'Смысловой поиск по видеолекциям'}
+    <section className="hero">
+      <div className="eyebrow">
+        <span>{name ? `С возвращением, ${name}` : 'Смысловой поиск по видеолекциям'}</span>
       </div>
-      <h1>Найдите нужный момент в любой лекции — по смыслу, а не по словам</h1>
+      <h1>
+        Найдите нужный момент в любой лекции — <span className="accent">по смыслу</span>, а не по словам
+      </h1>
       <p>Lectio расшифровывает видео, строит конспект с оглавлением и отвечает на вопросы со ссылками на таймкоды.</p>
-      <form className="hero-search" onSubmit={submit}>
+      <form className="hero-search" onSubmit={submit} role="search">
         <input
-          className="input"
           placeholder="Что вы хотите найти?"
+          aria-label="Поиск по лекциям"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button className="btn">
-          <Search size={17} /> Найти
-        </button>
+        <button className="btn btn-accent">Найти</button>
       </form>
       <div className="hero-hints">
+        <span className="muted">НАПРИМЕР:</span>
         {HINTS.map((hint) => (
           <button key={hint} type="button" onClick={() => go(hint)}>
             {hint}
@@ -49,27 +50,24 @@ function Hero({ name }: { name?: string }) {
   );
 }
 
-function Stat({ icon, value, label }: { icon: React.ReactNode; value: string | number; label: string }) {
-  return (
-    <div className="card stat">
-      <span className="stat-icon">{icon}</span>
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-    </div>
-  );
-}
-
-function SectionHead({ title, to, label = 'Смотреть все' }: { title: string; to?: string; label?: string }) {
+function SectionHead({ title, to, label = 'Все' }: { title: string; to?: string; label?: string }) {
   return (
     <div className="card-head">
       <h2>{title}</h2>
       {to && (
-        <Link to={to} className="btn btn-ghost btn-sm">
-          {label} <ArrowRight size={14} />
+        <Link to={to} className="link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {label} <ArrowRight size={15} />
         </Link>
       )}
     </div>
   );
+}
+
+function watchedTime(seconds: number) {
+  const hours = seconds / 3600;
+  if (hours >= 1) return `${hours.toFixed(1)} ч`;
+  if (seconds < 60) return '< 1 мин';
+  return `${Math.round(seconds / 60)} мин`;
 }
 
 function Dashboard() {
@@ -79,33 +77,31 @@ function Dashboard() {
   const { data: recent = [] } = useLectures();
   const navigate = useNavigate();
 
-  const hours = (dashboard?.watched_seconds ?? 0) / 3600;
-
   return (
     <div className="page">
       <Hero name={user?.first_name} />
 
       <div className="stats">
-        <Stat icon={<CheckCircle2 size={18} />} value={dashboard?.lectures_completed ?? '—'} label="лекций просмотрено" />
-        <Stat icon={<PlayCircle size={18} />} value={dashboard?.lectures_in_progress ?? '—'} label="в процессе" />
-        <Stat
-          icon={<Clock size={18} />}
-          value={
-            !dashboard
-              ? '—'
-              : hours >= 1
-                ? `${hours.toFixed(1)} ч`
-                : dashboard.watched_seconds < 60
-                  ? '< 1 мин'
-                  : `${Math.round(hours * 60)} мин`
-          }
-          label="времени в лекциях"
-        />
-        <Stat icon={<BookMarked size={18} />} value={dashboard?.bookmarks ?? '—'} label="заметок на таймкодах" />
+        <div className="stat">
+          <span className="stat-value">{dashboard?.lectures_completed ?? '—'}</span>
+          <span className="stat-label">лекций просмотрено</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">{dashboard?.lectures_in_progress ?? '—'}</span>
+          <span className="stat-label">в процессе</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value accent">{dashboard ? watchedTime(dashboard.watched_seconds) : '—'}</span>
+          <span className="stat-label">времени в лекциях</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">{dashboard?.bookmarks ?? '—'}</span>
+          <span className="stat-label">заметок на таймкодах</span>
+        </div>
       </div>
 
       {!!dashboard?.continue_watching.length && (
-        <section className="card card-pad">
+        <section className="card-pad">
           <SectionHead title="Продолжить просмотр" />
           <div className="grid">
             {dashboard.continue_watching.map((item) => (
@@ -115,18 +111,14 @@ function Dashboard() {
         </section>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 16 }} className="home-split">
-        <section className="card card-pad">
+      <div className="card home-split card-pad">
+        <section>
           <SectionHead title="Мои курсы" to="/courses" label="Все курсы" />
           {myCourses?.length ? (
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-              {myCourses.slice(0, 4).map((course) => (
-                <CourseCard key={course.id} course={course} />
-              ))}
-            </div>
+            myCourses.slice(0, 4).map((course, index) => <CourseCard key={course.id} course={course} index={index} />)
           ) : (
             <Empty
-              icon={<Compass size={22} />}
+              icon={<Compass size={24} />}
               title="Вы ещё не записались на курсы"
               action={
                 <Link to="/courses" className="btn btn-sm">
@@ -139,7 +131,7 @@ function Dashboard() {
           )}
         </section>
 
-        <section className="card card-pad">
+        <section>
           <SectionHead title="Недавние поиски" />
           {dashboard?.recent_searches.length ? (
             <div className="chips">
@@ -149,20 +141,20 @@ function Dashboard() {
                   className="chip"
                   onClick={() => navigate(`/search?q=${encodeURIComponent(item.query)}`)}
                 >
-                  <History size={13} /> {item.query}
+                  {item.query}
                 </button>
               ))}
             </div>
           ) : (
-            <p className="muted" style={{ fontSize: 14 }}>Здесь появятся ваши запросы.</p>
+            <p className="muted">Здесь появятся ваши запросы.</p>
           )}
         </section>
       </div>
 
       <section className="card card-pad">
-        <SectionHead title="Новые лекции" to="/lectures" />
+        <SectionHead title="Новые лекции" to="/lectures" label="Все лекции" />
         <div className="grid">
-          {recent.slice(0, 4).map((lecture) => (
+          {recent.slice(0, 3).map((lecture) => (
             <LectureCard key={lecture.id} lecture={lecture} />
           ))}
         </div>
@@ -179,23 +171,12 @@ function Welcome() {
     <div className="page">
       <Hero />
 
-      {courses.length > 0 && (
-        <section className="card card-pad">
-          <SectionHead title="Курсы" to="/courses" />
-          <div className="grid">
-            {courses.slice(0, 3).map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
-        </section>
-      )}
-
       <section className="card card-pad">
-        <SectionHead title="Новые лекции" to="/lectures" />
+        <SectionHead title="Новые лекции" to="/lectures" label="Все лекции" />
         {isLoading ? (
           <div className="grid">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height={240} />
+              <Skeleton key={i} height={260} />
             ))}
           </div>
         ) : (
@@ -206,6 +187,15 @@ function Welcome() {
           </div>
         )}
       </section>
+
+      {courses.length > 0 && (
+        <section className="card card-pad">
+          <SectionHead title="Курсы" to="/courses" label="Все курсы" />
+          {courses.slice(0, 4).map((course, index) => (
+            <CourseCard key={course.id} course={course} index={index} />
+          ))}
+        </section>
+      )}
     </div>
   );
 }

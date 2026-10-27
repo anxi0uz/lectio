@@ -11,13 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lectio.core.config import get_settings
 from lectio.core.media import (
+    MediaCommandError,
     MediaInfo,
     RemoteVideo,
     UrlProbeError,
+    extract_frame,
     probe_media,
 )
 from lectio.core.storage import (
+    THUMBNAIL_FILENAME,
     ensure_lecture_dir,
+    lecture_dir,
     remove_lecture_dir,
     resolve_media_path,
     to_media_path,
@@ -39,6 +43,7 @@ from lectio.modules.lectures.exceptions import (
     LiveStreamError,
     MediaTooLongError,
     NoAudioError,
+    ThumbnailNotAvailableError,
     UnreadableMediaError,
     UnsupportedMediaError,
     UrlUnavailableError,
@@ -392,3 +397,33 @@ def get_video_file(
         raise VideoNotAvailableError
 
     return path, lecture.video_mime_type or media_type_for(path)
+
+
+def thumbnail_position(duration: float | None) -> float:
+    """A tenth into the lecture: past the title card, early enough to be
+    representative."""
+    if not duration:
+        return 5.0
+
+    return min(max(duration * 0.1, 1.0), 60.0)
+
+
+async def ensure_thumbnail(lecture: Lecture) -> Path:
+    """The lecture's preview frame, cut from the video on first request."""
+    if lecture.video_mime_type and not lecture.video_mime_type.startswith("video/"):
+        raise ThumbnailNotAvailableError
+
+    video, _ = get_video_file(lecture)
+    thumbnail = lecture_dir(lecture.id) / THUMBNAIL_FILENAME
+
+    if not thumbnail.is_file():
+        try:
+            await extract_frame(
+                video,
+                thumbnail_position(lecture.duration_seconds),
+                thumbnail,
+            )
+        except MediaCommandError as error:
+            raise ThumbnailNotAvailableError from error
+
+    return thumbnail

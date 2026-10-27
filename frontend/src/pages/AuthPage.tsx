@@ -1,15 +1,15 @@
-import { BookOpen, GraduationCap, ListTree, MessageSquareText, Search } from 'lucide-react';
+import { BookOpen, GraduationCap } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 
 import type { UserRole } from '../api/types';
 import { useAuth } from '../auth/AuthProvider';
-import { BrandMark } from '../components/Layout';
+import { Logo } from '../components/Layout';
 
 const FEATURES = [
-  { icon: <Search size={17} />, text: 'Поиск по смыслу: находит момент, даже если говорили другими словами' },
-  { icon: <ListTree size={17} />, text: 'Конспект и оглавление с переходом к разделу в один клик' },
-  { icon: <MessageSquareText size={17} />, text: 'AI-помощник отвечает по лекции со ссылками на таймкоды' },
+  'Поиск по смыслу: находит момент, даже если говорили другими словами',
+  'Конспект и оглавление с переходом к разделу в один клик',
+  'AI-помощник отвечает по лекции со ссылками на таймкоды',
 ];
 
 export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
@@ -57,19 +57,20 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   return (
     <div className="auth">
       <aside className="auth-side">
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <BrandMark />
-          <b style={{ fontSize: 20 }}>Lectio</b>
+        <Link to="/" aria-label="Lectio — на главную">
+          <Logo />
         </Link>
         <div>
-          <h1>Лекции, в которых легко найти нужное</h1>
+          <h1>
+            Лекции, в которых <span className="accent">легко найти</span> нужное
+          </h1>
           <p>Загрузите видео — получите расшифровку, конспект и помощника, который знает лекцию наизусть.</p>
         </div>
         <div className="auth-features">
-          {FEATURES.map((feature) => (
-            <div key={feature.text} className="auth-feature">
-              <span>{feature.icon}</span>
-              {feature.text}
+          {FEATURES.map((text, index) => (
+            <div key={text} className="auth-feature">
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              {text}
             </div>
           ))}
         </div>
@@ -77,8 +78,8 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
 
       <main className="auth-main">
         <div className="auth-card">
-          <h1 style={{ fontSize: 26 }}>{mode === 'login' ? 'С возвращением' : 'Создать аккаунт'}</h1>
-          <p className="muted" style={{ margin: '8px 0 24px' }}>
+          <h1 style={{ fontSize: 44 }}>{mode === 'login' ? 'С возвращением' : 'Новый аккаунт'}</h1>
+          <p className="muted" style={{ margin: '12px 0 28px' }}>
             {mode === 'login' ? 'Войдите, чтобы продолжить с того же места.' : 'Прогресс, заметки и избранное — в одном месте.'}
           </p>
 
@@ -149,7 +150,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
               {mode === 'register' && <span className="muted" style={{ fontSize: 12 }}>Не короче 8 символов</span>}
             </div>
 
-            <button className="btn btn-primary" disabled={pending} style={{ height: 44 }}>
+            <button className="btn btn-primary" disabled={pending} style={{ height: 52 }}>
               {pending ? 'Секунду…' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
             </button>
           </form>
@@ -157,11 +158,11 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           <p className="muted" style={{ marginTop: 20, fontSize: 14, textAlign: 'center' }}>
             {mode === 'login' ? (
               <>
-                Впервые здесь? <Link to={`/register?next=${encodeURIComponent(next)}`} style={{ color: 'var(--brand)', fontWeight: 600 }}>Создать аккаунт</Link>
+                Впервые здесь? <Link to={`/register?next=${encodeURIComponent(next)}`} className="link">Создать аккаунт</Link>
               </>
             ) : (
               <>
-                Уже есть аккаунт? <Link to={`/login?next=${encodeURIComponent(next)}`} style={{ color: 'var(--brand)', fontWeight: 600 }}>Войти</Link>
+                Уже есть аккаунт? <Link to={`/login?next=${encodeURIComponent(next)}`} className="link">Войти</Link>
               </>
             )}
           </p>

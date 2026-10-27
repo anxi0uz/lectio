@@ -61,7 +61,7 @@ export function ProfilePage() {
 
   return (
     <div className="page">
-      <section className="card page-header">
+      <section className="page-header">
         <div>
           <div className="eyebrow">Настройки</div>
           <h1>Профиль</h1>

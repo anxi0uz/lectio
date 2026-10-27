@@ -65,6 +65,25 @@ class LectureResponse(BaseModel):
 
         return f"/api/v1/lectures/{self.id}/video"
 
+    video_mime_type: str | None = Field(
+        default=None,
+        exclude=True,
+    )
+
+    @computed_field
+    @property
+    def thumbnail_url(self) -> str | None:
+        is_video = (self.video_mime_type or "video/").startswith("video/")
+
+        if self.video_path is None or not is_video:
+            return None
+
+        # The version changes whenever the lecture row does, so browsers can
+        # cache each URL forever.
+        version = int(self.updated_at.timestamp())
+
+        return f"/api/v1/lectures/{self.id}/thumbnail?v={version}"
+
     @computed_field
     @property
     def subtitles_url(self) -> str | None:

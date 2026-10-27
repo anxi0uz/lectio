@@ -1,15 +1,4 @@
-import {
-  BookOpen,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  FileText,
-  Globe,
-  Heart,
-  Link2,
-  RefreshCw,
-  Trash2,
-} from 'lucide-react';
+import { FileText, Heart, Link2, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -23,6 +12,7 @@ import {
   useLecture,
   useLectureActions,
   useLectureState,
+  useLectures,
   useSegments,
   useSummary,
   useToggleFavorite,
@@ -31,13 +21,13 @@ import {
 import type { SearchHit } from '../../api/types';
 import { useAuth } from '../../auth/AuthProvider';
 import { Avatar, Empty, Skeleton, useToast } from '../../components/ui';
-import { duration, fullName, timecode } from '../../lib/format';
+import { fullName, timecode } from '../../lib/format';
 import { ChatPanel } from './ChatPanel';
 import { CourseContent } from './CourseContent';
 import { Player } from './Player';
 import { ProcessingCard } from './ProcessingCard';
 import { BookmarksTab, ChaptersTab, SummaryTab, TermsTab, TranscriptTab } from './Tabs';
-import { TranscriptPanel } from './TranscriptPanel';
+import { NowSpeaking } from './TranscriptPanel';
 
 type Tab = 'summary' | 'chapters' | 'terms' | 'transcript' | 'notes';
 
@@ -58,6 +48,7 @@ export function LecturePage() {
   const { data: state } = useLectureState(id);
   const { data: course } = useCourse(lecture?.course_id);
   const { data: owner } = useUser(lecture?.owner_id);
+  const { data: courseLectures = [] } = useLectures({ courseId: lecture?.course_id ?? undefined });
   const actions = useLectureActions(id);
   const favorite = useToggleFavorite(id);
   const bookmarks = useBookmarkActions(id);
@@ -190,9 +181,11 @@ export function LecturePage() {
   if (!lecture) {
     return (
       <div className="page">
-        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Skeleton width={220} height={14} />
-          <Skeleton width="60%" height={30} />
+        <div className="page-header">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Skeleton width={220} height={14} />
+            <Skeleton width="70%" height={56} />
+          </div>
         </div>
         <div className="card lecture-layout">
           <div className="lecture-main">
@@ -216,72 +209,62 @@ export function LecturePage() {
     toast(time > 1 ? `Ссылка на момент ${timecode(time)} скопирована` : 'Ссылка скопирована');
   };
 
+  const order = [...courseLectures].reverse().findIndex((item) => item.id === id);
+  const watched = state?.progress.completed
+    ? 1
+    : lecture.duration_seconds
+      ? (state?.progress.position_seconds ?? 0) / lecture.duration_seconds
+      : 0;
+
   return (
     <div className="page">
-      <section className="card page-header" style={{ alignItems: 'center' }}>
+      <section className="page-header">
         <div style={{ minWidth: 0 }}>
-          <nav className="breadcrumbs">
-            {course ? (
-              <>
-                <Link to="/courses">Курсы</Link>
-                <ChevronRight size={14} />
-                <Link to={`/courses/${course.id}`}>{course.title}</Link>
-              </>
-            ) : (
-              <Link to="/lectures">Все лекции</Link>
+          <div className="eyebrow">
+            {course ? <Link to={`/courses/${course.id}`}>{course.title}</Link> : <Link to="/lectures">Все лекции</Link>}
+            {course && order >= 0 && (
+              <span className="accent">
+                Лекция {String(order + 1).padStart(2, '0')} / {String(courseLectures.length).padStart(2, '0')}
+              </span>
             )}
-            <ChevronRight size={14} />
-            <span className="current">Лекция</span>
-          </nav>
+            {lecture.language && <span>{LANGUAGES[lecture.language] ?? lecture.language}</span>}
+          </div>
           <h1>{lecture.title}</h1>
-          <div className="meta-row">
-            <span>
-              <Clock size={15} /> {duration(lecture.duration_seconds)}
-            </span>
-            {course && (
-              <span>
-                <BookOpen size={15} /> {course.title}
-              </span>
+          <div className="actions" style={{ marginTop: 24 }}>
+            <button className="btn btn-primary" onClick={share}>
+              <Link2 size={16} /> {time > 1 ? `Поделиться моментом ${timecode(time)}` : 'Поделиться'}
+            </button>
+            {user && (
+              <button
+                className={`btn${state?.is_favorite ? ' btn-active' : ''}`}
+                onClick={() => favorite.mutate(!state?.is_favorite)}
+              >
+                <Heart size={16} fill={state?.is_favorite ? 'currentColor' : 'none'} />
+                {state?.is_favorite ? 'В избранном' : 'В избранное'}
+              </button>
             )}
-            {lecture.language && (
-              <span>
-                <Globe size={15} /> {LANGUAGES[lecture.language] ?? lecture.language}
-              </span>
-            )}
-            {chapters.length > 0 && <span>{chapters.length} разделов</span>}
-            {state?.progress.completed && (
-              <span style={{ color: 'var(--success)' }}>
-                <CheckCircle2 size={15} /> Просмотрено
-              </span>
+            {course && user && !state?.is_enrolled_in_course && (
+              <button className="btn" onClick={() => enrollment.enroll.mutate()} disabled={enrollment.enroll.isPending}>
+                Записаться на курс
+              </button>
             )}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {course && user && !state?.is_enrolled_in_course && (
-            <button className="btn" onClick={() => enrollment.enroll.mutate()} disabled={enrollment.enroll.isPending}>
-              Записаться на курс
-            </button>
-          )}
-          {course && state?.is_enrolled_in_course && (
-            <span className="badge badge-success" style={{ height: 40, padding: '0 14px' }}>
-              <CheckCircle2 size={14} /> Вы записаны на курс
-            </span>
-          )}
-          {user && (
-            <button
-              className={`btn btn-icon${state?.is_favorite ? ' btn-active' : ''}`}
-              aria-label="Избранное"
-              title={state?.is_favorite ? 'Убрать из избранного' : 'В избранное'}
-              onClick={() => favorite.mutate(!state?.is_favorite)}
-            >
-              <Heart size={18} fill={state?.is_favorite ? 'currentColor' : 'none'} />
-            </button>
-          )}
-          <button className="btn btn-primary" onClick={share}>
-            <Link2 size={16} /> Поделиться
-          </button>
-        </div>
+        <dl className="facts">
+          <div>
+            <dt>Длина</dt>
+            <dd>{timecode(lecture.duration_seconds)}</dd>
+          </div>
+          <div>
+            <dt>Разделы</dt>
+            <dd>{chapters.length || '—'}</dd>
+          </div>
+          <div>
+            <dt>{user ? 'Пройдено' : 'Термины'}</dt>
+            <dd className="accent">{user ? `${Math.round(watched * 100)}%` : terms.length || '—'}</dd>
+          </div>
+        </dl>
       </section>
 
       {(processing || lecture.status === 'failed') && (
@@ -298,7 +281,6 @@ export function LecturePage() {
           <Player
             videoRef={videoRef}
             src={lecture.video_url}
-            title={lecture.title}
             duration={lecture.duration_seconds}
             segments={segments}
             chapterStarts={chapters.map((c) => c.start_seconds)}
@@ -309,10 +291,17 @@ export function LecturePage() {
             onLoaded={onLoaded}
             onBookmark={addBookmark}
             placeholder={
-              <>
-                <b>Видео скачивается</b>
-                <span style={{ fontSize: 14, opacity: 0.7 }}>Оно появится здесь, как только загрузка завершится</span>
-              </>
+              lecture.status === 'failed' ? (
+                <>
+                  <b>Видео не загрузилось</b>
+                  <span>Причина и кнопка повтора — выше</span>
+                </>
+              ) : (
+                <>
+                  <b>Видео скачивается</b>
+                  <span>Оно появится здесь, как только загрузка завершится</span>
+                </>
+              )
             }
           />
 
@@ -363,17 +352,20 @@ export function LecturePage() {
           </div>
 
           {owner && (
-            <div className="list-item" style={{ border: '1px solid var(--border)', padding: 14 }}>
-              <Avatar user={owner} size={40} />
+            <div className="list-item" style={{ borderTop: '1px solid var(--line)' }}>
+              <Avatar user={owner} size={44} />
               <div>
-                <div style={{ fontWeight: 600 }}>{fullName(owner)}</div>
-                <div className="muted" style={{ fontSize: 13 }}>Преподаватель</div>
+                <div className="label muted">Преподаватель</div>
+                <div style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 20, letterSpacing: '-0.02em' }}>
+                  {fullName(owner)}
+                </div>
               </div>
             </div>
           )}
 
           {canManage && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="actions" style={{ borderTop: '1px solid var(--hair)', paddingTop: 16 }}>
+              <span className="label muted" style={{ alignSelf: 'center', marginRight: 8 }}>Управление</span>
               <button
                 className="btn btn-sm"
                 disabled={!searchable || actions.resummarize.isPending}
@@ -412,20 +404,8 @@ export function LecturePage() {
         </div>
 
         <aside className="lecture-aside">
-          <div className="panel">
-            <div className="panel-head">
-              <h3>Расшифровка</h3>
-              {playing && (
-                <span className="badge badge-brand">
-                  <span className="dot dot-pulse" /> синхронно с видео
-                </span>
-              )}
-            </div>
-            <TranscriptPanel segments={segments} time={time} onSeek={seek} maxHeight={360} />
-          </div>
-
-          <ChatPanel lectureId={id} enabled={searchable} onOpenSource={openSource} />
-
+          <NowSpeaking segments={segments} time={time} onSeek={seek} />
+          <ChatPanel lectureId={id} enabled={searchable} chapters={chapters} onOpenSource={openSource} />
           {course && <CourseContent course={course} currentId={id} />}
         </aside>
       </section>

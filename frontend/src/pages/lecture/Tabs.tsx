@@ -69,29 +69,33 @@ export function ChaptersTab({
   const currentStart = starts.filter((s) => s <= time).at(-1);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {chapters.map((chapter) => (
-        <div key={chapter.id}>
+    <ol className="chapters">
+      {chapters.map((chapter, index) => (
+        <li key={chapter.id}>
           <button
             className={`chapter${chapter.start_seconds === currentStart ? ' active' : ''}`}
             onClick={() => onSeek(chapter.start_seconds)}
           >
-            <span className="time-chip">{timecode(chapter.start_seconds)}</span>
+            <span className="chapter-num">{String(index + 1).padStart(2, '0')}</span>
             <span className="chapter-title">{chapter.title}</span>
+            <span className="chapter-time">{timecode(chapter.start_seconds)}</span>
           </button>
-          {chapter.subsections.map((sub) => (
+          {chapter.subsections.map((sub, subIndex) => (
             <button
               key={sub.id}
               className={`chapter sub${sub.start_seconds === currentStart && sub.start_seconds !== chapter.start_seconds ? ' active' : ''}`}
               onClick={() => onSeek(sub.start_seconds)}
             >
-              <span className="time-chip">{timecode(sub.start_seconds)}</span>
+              <span className="chapter-num">
+                {index + 1}.{subIndex + 1}
+              </span>
               <span className="chapter-title">{sub.title}</span>
+              <span className="chapter-time">{timecode(sub.start_seconds)}</span>
             </button>
           ))}
-        </div>
+        </li>
       ))}
-    </div>
+    </ol>
   );
 }
 
@@ -143,45 +147,43 @@ export function TranscriptTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <form onSubmit={submit} style={{ display: 'flex', gap: 8 }}>
+      <form onSubmit={submit} style={{ display: 'flex' }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <Search size={16} className="muted" style={{ position: 'absolute', left: 12, top: 13 }} />
+          <Search size={16} className="muted" style={{ position: 'absolute', left: 14, top: 15 }} />
           <input
             className="input"
-            style={{ paddingLeft: 36 }}
+            style={{ paddingLeft: 40 }}
             placeholder="Поиск по смыслу внутри лекции"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
           />
         </div>
-        <button className="btn" disabled={!draft.trim()}>
+        <button className="btn btn-primary" style={{ marginLeft: -1.5 }} disabled={!draft.trim()}>
           {results.isFetching ? <Spinner size={14} /> : 'Найти'}
         </button>
       </form>
 
       {query && (
-        <div className="card" style={{ padding: 6 }}>
+        <div>
           {results.data?.length ? (
             results.data.map((hit) => (
               <button
                 key={hit.chunk_id}
                 className="search-result"
-                style={{ border: 0, background: 'transparent', textAlign: 'left', width: '100%' }}
+                style={{ background: 'transparent', textAlign: 'left', width: '100%', border: 0, borderTop: '1px solid var(--line)' }}
                 onClick={() => onSeek(hit.start_seconds)}
               >
-                <span className="search-result-head">
-                  <span className="time-chip">{timecode(hit.start_seconds)}</span>
-                </span>
-                <span className="search-result-text" dangerouslySetInnerHTML={{ __html: hit.highlight }} />
+                <span className="search-result-time">{timecode(hit.start_seconds)}</span>
+                <span className="search-result-text" style={{ marginTop: 0 }} dangerouslySetInnerHTML={{ __html: hit.highlight }} />
               </button>
             ))
           ) : (
-            !results.isFetching && <p className="muted" style={{ padding: 14 }}>Ничего не нашлось</p>
+            !results.isFetching && <p className="muted">Ничего не нашлось</p>
           )}
         </div>
       )}
 
-      <div className="card" style={{ paddingTop: 12 }}>
+      <div>
         <TranscriptPanel segments={segments} time={time} onSeek={onSeek} maxHeight={560} withFilter />
       </div>
     </div>
@@ -230,8 +232,8 @@ export function BookmarksTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <form onSubmit={add} style={{ display: 'flex', gap: 8 }}>
-        <span className="time-chip" style={{ alignSelf: 'center', cursor: 'default' }}>
+      <form onSubmit={add} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <span className="search-result-time" style={{ fontSize: 22, minWidth: 64 }}>
           {timecode(time)}
         </span>
         <input

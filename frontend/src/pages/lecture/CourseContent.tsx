@@ -1,4 +1,3 @@
-import { Pause, Play } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { useLectures } from '../../api/hooks';
@@ -12,29 +11,25 @@ export function CourseContent({ course, currentId }: { course: Course; currentId
   const ordered = [...lectures].reverse();
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <h3>Содержание курса</h3>
-        <span className="muted" style={{ fontSize: 13 }}>{lecturesLabel(ordered.length)}</span>
+    <section aria-label="Содержание курса">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <h2 className="label">Курс · {course.title}</h2>
+        <span className="label muted">{lecturesLabel(ordered.length)}</span>
       </div>
-      <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
-        {ordered.map((lecture, index) => {
-          const current = lecture.id === currentId;
-
-          return (
-            <Link key={lecture.id} to={`/lectures/${lecture.id}`} className={`course-item${current ? ' current' : ''}`}>
-              <span className="course-item-index">{String(index + 1).padStart(2, '0')}</span>
-              <div style={{ minWidth: 0 }}>
-                <div className="course-item-title">{lecture.title}</div>
-                <div className="course-item-meta">
-                  {lecture.status === 'ready' ? timecode(lecture.duration_seconds) : <StatusBadge status={lecture.status} />}
-                </div>
-              </div>
-              <span className="course-item-icon">{current ? <Pause size={13} /> : <Play size={13} />}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+      {ordered.map((lecture, index) => (
+        <Link
+          key={lecture.id}
+          to={`/lectures/${lecture.id}`}
+          className={`course-item${lecture.id === currentId ? ' current' : ''}`}
+          aria-current={lecture.id === currentId ? 'page' : undefined}
+        >
+          <span className="course-item-index">{String(index + 1).padStart(2, '0')}</span>
+          <span className="course-item-title">{lecture.title}</span>
+          <span className="course-item-meta">
+            {lecture.status === 'ready' ? timecode(lecture.duration_seconds) : <StatusBadge status={lecture.status} />}
+          </span>
+        </Link>
+      ))}
+    </section>
   );
 }

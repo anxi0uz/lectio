@@ -64,6 +64,7 @@ export interface Lecture {
   created_at: string;
   updated_at: string;
   video_url: string | null;
+  thumbnail_url: string | null;
   subtitles_url: string | null;
 }
 

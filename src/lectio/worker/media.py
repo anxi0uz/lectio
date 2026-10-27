@@ -1,3 +1,5 @@
+import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +15,14 @@ log = structlog.get_logger(
 )
 
 
+# Network hiccups are common on long downloads; each retry resumes the
+# partial file rather than starting over.
+DOWNLOAD_ATTEMPTS = 3
+DOWNLOAD_RETRY_DELAYS = (3, 10)
+# The merged result: "video.mp4", never a per-stream "video.f136.mp4".
+FINAL_VIDEO = re.compile(r"^video\.[A-Za-z0-9]+$")
+
+
 class MediaError(RuntimeError):
     pass
 
@@ -24,15 +34,38 @@ class DownloadedVideo:
     duration: float | None
 
 
+def _download_with_retries(
+    url: str,
+    options: dict[str, Any],
+) -> dict[str, Any]:
+    from yt_dlp import YoutubeDL
+    from yt_dlp.utils import DownloadError
+
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with YoutubeDL(options) as ydl:  # pyright: ignore[reportArgumentType]
+                info = ydl.extract_info(url, download=True)
+                return dict(info or {})
+        except DownloadError as error:
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise MediaError(f"Could not download video: {error}") from error
+
+            log.warning(
+                "download_retry",
+                attempt=attempt,
+                error=str(error)[:300],
+            )
+            time.sleep(DOWNLOAD_RETRY_DELAYS[attempt - 1])
+
+    raise AssertionError("unreachable")
+
+
 def download_video(
     url: str,
     directory: Path,
     on_progress: Callable[[float], None],
 ) -> DownloadedVideo:
     """Blocking; run it in a thread."""
-    from yt_dlp import YoutubeDL
-    from yt_dlp.utils import DownloadError
-
     height = get_settings().download_max_height
 
     def hook(status: dict[str, Any]) -> None:
@@ -56,27 +89,24 @@ def download_video(
         "no_warnings": True,
         "noprogress": True,
         "progress_hooks": [hook],
+        "continuedl": True,
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 3,
+        "socket_timeout": 30,
     }
 
-    try:
-        with YoutubeDL(options) as ydl:  # pyright: ignore[reportArgumentType]
-            info = ydl.extract_info(url, download=True)
-    except DownloadError as error:
-        raise MediaError(f"Could not download video: {error}") from error
+    info = _download_with_retries(url, options)
 
-    files = sorted(
-        path
-        for path in directory.glob("video.*")
-        if path.suffix not in (".part", ".ytdl")
-    )
+    files = sorted(path for path in directory.iterdir() if FINAL_VIDEO.match(path.name))
 
     if not files:
         raise MediaError("Downloaded video file not found")
 
     return DownloadedVideo(
         path=files[0],
-        title=(info or {}).get("title"),
-        duration=(info or {}).get("duration"),
+        title=info.get("title"),
+        duration=info.get("duration"),
     )
 
 

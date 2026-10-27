@@ -1,4 +1,4 @@
-import { BookOpen, CheckCircle2, ChevronRight, Clock, Search, Upload } from 'lucide-react';
+import { BookOpen, CheckCircle2, Search, Upload } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
@@ -36,25 +36,14 @@ export function CoursePage() {
 
   return (
     <div className="page">
-      <section className="card page-header">
+      <section className="page-header">
         <div style={{ flex: 1, minWidth: 0 }}>
-          <nav className="breadcrumbs">
-            <Link to="/courses">Курсы</Link>
-            <ChevronRight size={14} />
-            <span className="current">{course?.title ?? '…'}</span>
-          </nav>
+          <div className="eyebrow">
+            <Link to="/courses">Курс</Link>
+            {course && <span className="accent">{lecturesLabel(course.lectures_count)} · {duration(course.total_duration_seconds)}</span>}
+          </div>
           {course ? <h1>{course.title}</h1> : <Skeleton width="50%" height={32} />}
           {course?.description && <p>{course.description}</p>}
-          {course && (
-            <div className="meta-row">
-              <span>
-                <BookOpen size={15} /> {lecturesLabel(course.lectures_count)}
-              </span>
-              <span>
-                <Clock size={15} /> {duration(course.total_duration_seconds)}
-              </span>
-            </div>
-          )}
           {enrolled && (
             <div style={{ marginTop: 16, maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <Bar value={enrolled.progress} brand />

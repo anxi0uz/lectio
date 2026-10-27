@@ -47,21 +47,20 @@ export function TranscriptPanel({
 
   if (!segments.length) {
     return (
-      <div className="empty" style={{ padding: 24 }}>
-        <ListVideo size={20} className="muted" />
-        <p>Расшифровка появится после обработки</p>
-      </div>
+      <p className="muted" style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 0' }}>
+        <ListVideo size={18} /> Расшифровка появится после обработки
+      </p>
     );
   }
 
   return (
     <>
       {withFilter && (
-        <div style={{ position: 'relative', margin: '0 18px 10px' }}>
-          <Search size={15} className="muted" style={{ position: 'absolute', left: 12, top: 13 }} />
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <Search size={15} className="muted" style={{ position: 'absolute', left: 14, top: 15 }} />
           <input
             className="input"
-            style={{ paddingLeft: 34 }}
+            style={{ paddingLeft: 38 }}
             placeholder="Найти слово в расшифровке"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -90,8 +89,39 @@ export function TranscriptPanel({
             </button>
           );
         })}
-        {!visible.length && <p className="muted" style={{ padding: 12, fontSize: 14 }}>Ничего не нашлось</p>}
+        {!visible.length && <p className="muted" style={{ padding: '12px 0' }}>Ничего не нашлось</p>}
       </div>
     </>
+  );
+}
+
+/** The phrase being spoken right now, large, above the running transcript. */
+export function NowSpeaking({
+  segments,
+  time,
+  onSeek,
+}: {
+  segments: Segment[];
+  time: number;
+  onSeek: (seconds: number) => void;
+}) {
+  const index = segmentAt(segments, time);
+  const current = segments[Math.max(index, 0)];
+
+  return (
+    <section className="now" aria-label="Расшифровка">
+      <h2 className="now-head label">
+        <span className="dot" />
+        Сейчас говорит{current ? ` · ${timecode(current.start_seconds)}` : ''}
+      </h2>
+      {current ? (
+        <>
+          <p className="now-quote">«{current.text}»</p>
+          <TranscriptPanel segments={segments} time={time} onSeek={onSeek} maxHeight={300} />
+        </>
+      ) : (
+        <p className="muted">Расшифровка появится после обработки</p>
+      )}
+    </section>
   );
 }

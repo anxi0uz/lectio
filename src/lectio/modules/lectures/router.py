@@ -28,6 +28,7 @@ from lectio.modules.lectures.service import (
     create_imported_lecture,
     create_uploaded_lecture,
     delete_lecture,
+    ensure_thumbnail,
     get_lecture_by_id,
     get_video_file,
     list_lectures,
@@ -223,4 +224,24 @@ async def get_video_endpoint(
     return FileResponse(
         path,
         media_type=media_type,
+    )
+
+
+@router.get(
+    "/{lecture_id}/thumbnail",
+    response_class=FileResponse,
+    responses={200: {"content": {"image/jpeg": {}}}},
+)
+async def get_thumbnail_endpoint(
+    lecture_id: UUID,
+    db: SessionDep,
+) -> FileResponse:
+    """Preview frame for lecture cards; 404 for audio-only lectures."""
+    lecture = await get_lecture_by_id(db, lecture_id)
+    path = await ensure_thumbnail(lecture)
+
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )

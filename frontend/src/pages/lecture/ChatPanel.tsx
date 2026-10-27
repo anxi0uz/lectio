@@ -1,8 +1,7 @@
-import { ArrowUp, Sparkles } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { messageForCode, streamEvents } from '../../api/client';
-import type { ChatMessage, SearchHit } from '../../api/types';
+import type { Chapter, ChatMessage, SearchHit } from '../../api/types';
 import { Markdown } from '../../components/Markdown';
 import { timecode } from '../../lib/format';
 
@@ -14,25 +13,26 @@ const SUGGESTIONS = [
   'Объясни самое сложное место попроще',
 ];
 
-function Wave({ active }: { active: boolean }) {
-  const heights = [10, 18, 12, 24, 16, 28, 14, 22, 10, 18, 26, 12];
+const QUOTE_CHARS = 110;
 
-  return (
-    <div className={`wave${active ? ' active' : ''}`} aria-hidden>
-      {heights.map((h, i) => (
-        <span key={i} style={{ height: h, animationDelay: `${i * 0.08}s` }} />
-      ))}
-    </div>
-  );
+function quote(text: string) {
+  return text.length > QUOTE_CHARS ? `${text.slice(0, QUOTE_CHARS).trimEnd()}…` : text;
+}
+
+/** The section of the lecture a moment belongs to, for source labels. */
+function chapterAt(chapters: Chapter[], seconds: number) {
+  return chapters.filter((chapter) => chapter.start_seconds <= seconds).at(-1)?.title;
 }
 
 export function ChatPanel({
   lectureId,
   enabled,
+  chapters,
   onOpenSource,
 }: {
   lectureId: string;
   enabled: boolean;
+  chapters: Chapter[];
   onOpenSource: (hit: SearchHit) => void;
 }) {
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -101,22 +101,24 @@ export function ChatPanel({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    send(question);
+    void send(question);
+  };
+
+  /** Sources the answer actually cites; all of them if it cites none. */
+  const cited = (turn: Turn) => {
+    const sources = turn.sources ?? [];
+    const numbers = new Set([...turn.content.matchAll(/\[(\d{1,2})\]/g)].map((m) => Number(m[1])));
+    const used = sources.map((hit, i) => ({ hit, n: i + 1 })).filter(({ n }) => numbers.has(n));
+    return used.length ? used : sources.map((hit, i) => ({ hit, n: i + 1 }));
   };
 
   return (
-    <div className="panel">
-      <div className="assistant-head">
-        <span className="assistant-mark">
-          <Sparkles size={20} />
+    <section className="panel" aria-label="Вопрос к лекции">
+      <div className="panel-head">
+        <h3>Спросите лекцию</h3>
+        <span className="label muted" style={{ fontSize: 11 }}>
+          {pending ? 'ищет в расшифровке…' : 'ответ по расшифровке'}
         </span>
-        <div>
-          <h3>AI-помощник</h3>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {pending ? 'Ищет ответ в лекции…' : 'Отвечает по материалам лекции'}
-          </div>
-        </div>
-        <Wave active={pending} />
       </div>
 
       {enabled ? (
@@ -124,15 +126,11 @@ export function ChatPanel({
           <div ref={log} className="chat">
             {turns.map((turn, index) =>
               turn.role === 'user' ? (
-                <div key={index} className="bubble bubble-user">
+                <p key={index} className="bubble-user">
                   {turn.content}
-                </div>
+                </p>
               ) : (
-                <div
-                  key={index}
-                  className="bubble bubble-assistant"
-                  style={turn.error ? { color: 'var(--danger)' } : undefined}
-                >
+                <div key={index} className={`answer${turn.error ? ' answer-error' : ''}`}>
                   {turn.content ? (
                     <Markdown
                       onCite={(n) => {
@@ -143,22 +141,28 @@ export function ChatPanel({
                       {turn.content}
                     </Markdown>
                   ) : (
-                    <span className="typing">
+                    <span className="typing" aria-label="Печатает">
                       <span />
                       <span />
                       <span />
                     </span>
                   )}
-                  {!turn.streaming && !!turn.sources?.length && (
+
+                  {!turn.streaming && !turn.error && !!turn.sources?.length && (
                     <div className="sources">
-                      {turn.sources.map((hit, i) => (
-                        <button
-                          key={hit.chunk_id}
-                          className="time-chip"
-                          onClick={() => onOpenSource(hit)}
-                          title={hit.text}
-                        >
-                          [{i + 1}] {timecode(hit.start_seconds)}
+                      <span className="label">Источники в лекции</span>
+                      {cited(turn).map(({ hit, n }) => (
+                        <button key={hit.chunk_id} className="source" onClick={() => onOpenSource(hit)}>
+                          <span className="source-n">{n}</span>
+                          <span className="source-time">▶ {timecode(hit.start_seconds)}</span>
+                          <span>
+                            <span className="source-title">
+                              {hit.lecture_id === lectureId
+                                ? chapterAt(chapters, hit.start_seconds) ?? 'Фрагмент лекции'
+                                : hit.lecture_title}
+                            </span>
+                            <span className="source-quote">«{quote(hit.text)}»</span>
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -166,35 +170,33 @@ export function ChatPanel({
                 </div>
               ),
             )}
-          </div>
 
-          {!turns.length && (
-            <div className="suggestions">
-              {SUGGESTIONS.map((text) => (
-                <button key={text} onClick={() => send(text)}>
-                  {text}
-                </button>
-              ))}
-            </div>
-          )}
+            {!turns.length && (
+              <div className="suggestions">
+                {SUGGESTIONS.map((text) => (
+                  <button key={text} onClick={() => void send(text)}>
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <form className="chat-form" onSubmit={submit}>
             <input
-              className="input"
-              placeholder="Спросите о лекции…"
+              placeholder="Свой вопрос к лекции…"
+              aria-label="Вопрос к лекции"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
             />
-            <button className="btn btn-primary btn-icon" disabled={!question.trim() || pending} aria-label="Спросить">
-              <ArrowUp size={18} />
-            </button>
+            <button disabled={!question.trim() || pending}>Спросить</button>
           </form>
         </>
       ) : (
-        <p className="muted" style={{ padding: '0 18px 18px', fontSize: 14 }}>
-          Помощник заработает, когда лекция будет расшифрована.
+        <p className="muted" style={{ padding: 16 }}>
+          Заработает, когда лекция будет расшифрована.
         </p>
       )}
-    </div>
+    </section>
   );
 }

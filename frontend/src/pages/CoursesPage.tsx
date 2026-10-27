@@ -61,7 +61,7 @@ export function CoursesPage() {
 
   return (
     <div className="page">
-      <section className="card page-header">
+      <section className="page-header">
         <div>
           <div className="eyebrow">Каталог</div>
           <h1>Курсы</h1>
@@ -79,9 +79,9 @@ export function CoursesPage() {
           <div className="card-head">
             <h2>Мои курсы</h2>
           </div>
-          <div className="grid">
-            {mine.map((course) => (
-              <CourseCard key={course.id} course={course} />
+          <div>
+            {mine.map((course, index) => (
+              <CourseCard key={course.id} course={course} index={index} />
             ))}
           </div>
         </section>
@@ -98,9 +98,9 @@ export function CoursesPage() {
             ))}
           </div>
         ) : courses?.length ? (
-          <div className="grid">
-            {courses.map((course) => (
-              <CourseCard key={course.id} course={enrolled.get(course.id) ?? course} />
+          <div>
+            {courses.map((course, index) => (
+              <CourseCard key={course.id} course={enrolled.get(course.id) ?? course} index={index} />
             ))}
           </div>
         ) : (

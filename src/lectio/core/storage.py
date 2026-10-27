@@ -5,6 +5,7 @@ from uuid import UUID
 from lectio.core.config import get_settings
 
 AUDIO_FILENAME = "audio.wav"
+THUMBNAIL_FILENAME = "thumbnail.jpg"
 
 
 def lecture_dir(lecture_id: UUID) -> Path:

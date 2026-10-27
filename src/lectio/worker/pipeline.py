@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from structlog.contextvars import bound_contextvars
 
 from lectio.core.config import get_settings
+from lectio.core.exceptions import DomainError
 from lectio.core.jobs import Job, JobKind
 from lectio.core.media import probe_media
 from lectio.core.storage import (
@@ -23,7 +24,7 @@ from lectio.ml.llm import get_llm
 from lectio.ml.transcriber import get_transcriber, release_transcriber
 from lectio.models import Chunk, Lecture
 from lectio.models.enums import IN_PROGRESS_STATUSES, LectureStatus, SourceType
-from lectio.modules.lectures.service import media_type_for
+from lectio.modules.lectures.service import ensure_thumbnail, media_type_for
 from lectio.modules.search.service import index_lecture
 from lectio.modules.summaries.generator import generate_summary
 from lectio.modules.summaries.service import save_summary
@@ -167,6 +168,7 @@ async def process_lecture(lecture: Lecture) -> None:
 
     audio_path = directory / AUDIO_FILENAME
     await extract_audio(video_path, audio_path)
+    await _prepare_thumbnail(lecture.id)
 
     if lecture.duration_seconds is None:
         info = await probe_media(video_path)
@@ -232,6 +234,18 @@ async def _make_room_on_gpu() -> None:
     """
     if get_settings().release_models_between_stages:
         await get_llm().unload()
+
+
+async def _prepare_thumbnail(lecture_id: UUID) -> None:
+    """Cut the preview now so the first catalog view does not wait on it."""
+    lecture = await load_lecture(lecture_id)
+    if lecture is None:
+        raise LectureGoneError
+
+    try:
+        await ensure_thumbnail(lecture)
+    except DomainError:
+        log.info("thumbnail_skipped")
 
 
 async def _transcribe(

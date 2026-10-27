@@ -1,4 +1,5 @@
 import { Clock, FileVideo, Play } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { isProcessing } from '../api/hooks';
@@ -13,11 +14,12 @@ export function Thumbnail({
   lecture: Lecture;
   watched?: number;
 }) {
+  const [broken, setBroken] = useState(false);
+
   return (
     <div className="thumb">
-      {lecture.video_url ? (
-        // A frame a few seconds in stands in for a poster image.
-        <video src={`${lecture.video_url}#t=8`} preload="metadata" muted playsInline />
+      {lecture.thumbnail_url && !broken ? (
+        <img src={lecture.thumbnail_url} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />
       ) : (
         <FileVideo size={36} strokeWidth={1.4} />
       )}

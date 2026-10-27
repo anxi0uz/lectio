@@ -77,7 +77,7 @@ export function UploadPage() {
 
   return (
     <div className="page">
-      <section className="card page-header">
+      <section className="page-header">
         <div>
           <div className="eyebrow">Для преподавателей</div>
           <h1>Загрузить лекцию</h1>
@@ -112,12 +112,12 @@ export function UploadPage() {
               <CloudUpload size={32} strokeWidth={1.5} />
               {file ? (
                 <>
-                  <b style={{ color: 'var(--text)' }}>{file.name}</b>
+                  <b>{file.name}</b>
                   <span className="muted">{formatSize(file.size)} · нажмите, чтобы выбрать другой</span>
                 </>
               ) : (
                 <>
-                  <b style={{ color: 'var(--text)' }}>Перетащите видео сюда или нажмите</b>
+                  <b>Перетащите видео сюда или нажмите</b>
                   <span className="muted">MP4, WebM, MOV, MKV или аудио</span>
                 </>
               )}

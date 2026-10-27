@@ -264,3 +264,35 @@ async def test_deleting_course_keeps_lectures(
 
     assert deleted.status_code == 204
     assert after.json()["course_id"] is None
+
+
+async def test_thumbnail_is_cut_from_the_video(
+    client: AsyncClient,
+    teacher: RegisteredUser,
+) -> None:
+    video = (
+        await client.post(
+            "/api/v1/lectures",
+            headers=teacher.headers,
+            files={"file": ("clip.mp4", sample_media("video"), "video/mp4")},
+        )
+    ).json()
+    audio = (
+        await client.post(
+            "/api/v1/lectures",
+            headers=teacher.headers,
+            files={"file": ("talk.wav", sample_media("audio"), "audio/wav")},
+        )
+    ).json()
+
+    first = await client.get(video["thumbnail_url"])
+    again = await client.get(video["thumbnail_url"])
+    audio_thumbnail = await client.get(f"/api/v1/lectures/{audio['id']}/thumbnail")
+
+    assert first.status_code == 200
+    assert first.headers["content-type"] == "image/jpeg"
+    assert first.content.startswith(b"\xff\xd8")
+    assert "immutable" in first.headers["cache-control"]
+    assert again.content == first.content
+    assert audio["thumbnail_url"] is None
+    assert audio_thumbnail.status_code == 404

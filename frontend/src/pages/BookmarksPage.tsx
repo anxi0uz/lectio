@@ -17,7 +17,7 @@ export function BookmarksPage() {
 
   return (
     <div className="page">
-      <section className="card page-header">
+      <section className="page-header">
         <div>
           <div className="eyebrow">Моё</div>
           <h1>Заметки</h1>
