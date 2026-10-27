@@ -1,6 +1,8 @@
 from lectio.ml.chunking import TextChunk, build_chunks
 from lectio.ml.llm import ThinkFilter
 from lectio.ml.transcriber import TranscribedSegment, split_into_cues
+from lectio.modules.quizzes.generator import build_question
+from lectio.modules.quizzes.schemas import DraftQuestion
 from lectio.modules.summaries.generator import locate_terms, normalize_outline
 from lectio.modules.summaries.schemas import KeyTerm, OutlineSection
 from lectio.modules.transcripts.service import format_vtt_timestamp
@@ -140,3 +142,33 @@ def test_think_blocks_are_dropped_from_a_stream() -> None:
     streamed = "".join(think.feed(piece) for piece in pieces) + think.flush()
 
     assert streamed == "Ответ <b>да</b>"
+
+
+def test_build_question_shuffles_and_snaps() -> None:
+    question = build_question(
+        DraftQuestion(
+            question="Что лежит против прямого угла?",
+            correct="Гипотенуза",
+            wrong=["Катет", " катет ", "Медиана", "Биссектриса", "Высота"],
+            start=47,
+        ),
+        [0.0, 40.0, 80.0],
+    )
+
+    assert question is not None
+    # Duplicates are dropped and the list is cut to four options.
+    assert sorted(question.options) == ["Биссектриса", "Гипотенуза", "Катет", "Медиана"]
+    assert question.options[question.answer] == "Гипотенуза"
+    assert question.start_seconds == 40.0
+
+
+def test_build_question_rejects_giveaways() -> None:
+    too_few = DraftQuestion(question="?", correct="Да", wrong=["Нет", "нет"])
+    quoted = DraftQuestion(
+        question="Как формулируется теорема?",
+        correct="Если сложить квадраты катетов, получится квадрат гипотенузы",
+        wrong=["Сумма катетов", "Разность катетов"],
+    )
+
+    assert build_question(too_few, []) is None
+    assert build_question(quoted, []) is None

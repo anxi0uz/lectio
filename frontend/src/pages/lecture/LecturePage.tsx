@@ -26,10 +26,11 @@ import { ChatPanel } from './ChatPanel';
 import { CourseContent } from './CourseContent';
 import { Player } from './Player';
 import { ProcessingCard } from './ProcessingCard';
+import { QuizTab } from './QuizTab';
 import { BookmarksTab, ChaptersTab, SummaryTab, TermsTab, TranscriptTab } from './Tabs';
 import { NowSpeaking } from './TranscriptPanel';
 
-type Tab = 'summary' | 'chapters' | 'terms' | 'transcript' | 'notes';
+type Tab = 'summary' | 'chapters' | 'terms' | 'quiz' | 'transcript' | 'notes';
 
 const PROGRESS_SAVE_MS = 10_000;
 const LANGUAGES: Record<string, string> = { ru: 'Русский', en: 'English' };
@@ -154,6 +155,7 @@ export function LecturePage() {
         { key: 'summary', label: 'Конспект' },
         { key: 'chapters', label: 'Оглавление', count: chapters.length },
         { key: 'terms', label: 'Термины', count: terms.length },
+        { key: 'quiz', label: 'Тест' },
         { key: 'transcript', label: 'Расшифровка' },
         { key: 'notes', label: 'Мои заметки', count: lectureBookmarks.length },
       ] as { key: Tab; label: string; count?: number }[],
@@ -337,6 +339,7 @@ export function LecturePage() {
             )}
             {tab === 'chapters' && <ChaptersTab chapters={chapters} time={time} onSeek={seek} />}
             {tab === 'terms' && <TermsTab terms={terms} onSeek={seek} />}
+            {tab === 'quiz' && <QuizTab lecture={lecture} signedIn={!!user} onSeek={seek} />}
             {tab === 'transcript' && (
               <TranscriptTab lectureId={id} segments={segments} time={time} onSeek={seek} />
             )}

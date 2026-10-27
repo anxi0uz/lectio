@@ -177,7 +177,7 @@ async def _merge_outline(
     return merged or draft
 
 
-def _snap(value: float, known: Sequence[float]) -> float:
+def snap_to_known(value: float, known: Sequence[float]) -> float:
     """Move a model-produced time to the nearest real chunk start."""
     index = bisect.bisect_left(known, value)
     candidates = known[max(index - 1, 0) : index + 1]
@@ -197,7 +197,7 @@ def normalize_outline(
             section.model_copy(
                 update={
                     "title": section.title.strip()[:300],
-                    "start": _snap(section.start, known_starts),
+                    "start": snap_to_known(section.start, known_starts),
                 }
             )
             for section in sections
@@ -220,7 +220,7 @@ def normalize_outline(
                 sub.model_copy(
                     update={
                         "title": sub.title.strip()[:300],
-                        "start": _snap(sub.start, known_starts),
+                        "start": snap_to_known(sub.start, known_starts),
                     }
                 )
                 for sub in section.subsections

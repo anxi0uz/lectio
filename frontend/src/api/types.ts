@@ -89,6 +89,20 @@ export interface KeyTerm {
   start_seconds: number | null;
 }
 
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  /** Index into options. */
+  answer: number;
+  explanation: string;
+  start_seconds: number | null;
+}
+
+export interface Quiz {
+  lecture_id: string;
+  questions: QuizQuestion[];
+}
+
 export interface Summary {
   lecture_id: string;
   status: LectureStatus;

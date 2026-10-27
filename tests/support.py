@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from alembic.config import Config
@@ -134,6 +134,23 @@ class FakeEmbedder:
 class FakeLLM:
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[dict[str, str]]]] = []
+        # What complete_json returns; tests replace it as needed.
+        self.json_payload: dict[str, Any] = {
+            "questions": [
+                {
+                    "question": "О чём первая мысль?",
+                    "correct": "О началах",
+                    "wrong": ["О концах", "О серединах", "о началах"],
+                    "explanation": "Так сказано в начале.",
+                    "start": 11,
+                },
+                {
+                    "question": "Без вариантов",
+                    "correct": "Ответ",
+                    "wrong": [],
+                },
+            ]
+        }
 
     async def complete(
         self,
@@ -144,6 +161,15 @@ class FakeLLM:
         self.calls.append((system, messages))
 
         return "Ответ по лекции [1]."
+
+    async def complete_json(
+        self,
+        system: str,
+        user: str,
+    ) -> dict[str, Any]:
+        self.calls.append((system, [{"role": "user", "content": user}]))
+
+        return self.json_payload
 
     async def stream(
         self,

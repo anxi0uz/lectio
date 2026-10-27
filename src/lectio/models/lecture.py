@@ -129,6 +129,12 @@ class Lecture(Base):
         server_default="[]",
     )
 
+    quiz: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        default=list,
+        server_default="[]",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

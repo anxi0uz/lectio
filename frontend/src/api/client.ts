@@ -54,6 +54,7 @@ const CODE_MESSAGES: Record<string, string> = {
   url_unavailable: 'По ссылке не нашлось видео. Проверьте, что оно открыто для всех',
   url_live_stream: 'Прямые трансляции не поддерживаются — дождитесь записи',
   llm_unavailable: 'AI-помощник сейчас недоступен. Поиск и расшифровка работают',
+  lecture_not_ready: 'Лекция ещё обрабатывается — попробуйте, когда она будет готова',
 };
 
 export function messageForCode(code: string | null | undefined): string | undefined {

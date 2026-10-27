@@ -16,6 +16,7 @@ import type {
   Lecture,
   LectureState,
   Progress,
+  Quiz,
   PublicUser,
   RecentSearch,
   SearchHit,
@@ -77,6 +78,23 @@ export function useSummary(lecture: Lecture | undefined) {
     queryKey: ['summary', lecture?.id, lecture?.status],
     queryFn: () => api<Summary>(`/lectures/${lecture!.id}/summary`),
     enabled: isSearchable(lecture),
+  });
+}
+
+export function useQuiz(lecture: Lecture | undefined) {
+  return useQuery({
+    queryKey: ['quiz', lecture?.id],
+    queryFn: () => api<Quiz>(`/lectures/${lecture!.id}/quiz`),
+    enabled: lecture?.status === 'ready',
+  });
+}
+
+export function useGenerateQuiz(id: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api<Quiz>(`/lectures/${id}/quiz`, { method: 'POST' }),
+    onSuccess: (quiz) => client.setQueryData(['quiz', id], quiz),
   });
 }
 

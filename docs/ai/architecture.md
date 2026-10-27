@@ -42,6 +42,16 @@
 - Видео доступно сразу после скачивания, а расшифровка ещё минуты идёт —
   пользователь путал это с «повторной обработкой».
 
+## Тест по лекции (`modules/quizzes`)
+
+Не в конвейере, а по запросу `POST /lectures/{id}/quiz` (нужен вход):
+части расшифровки как у конспекта, берутся до 3 равномерно, 6 вопросов.
+Модель отдаёт `correct` + `wrong[]`, сервер сам перемешивает варианты
+(иначе маленькая модель ставит верный первым) и «примагничивает» таймкод.
+Вопрос отбрасывается, если вариантов < 3 или верный в 2+ раза длиннее
+неверных (выдаёт себя; обычно это цитата, а неверный — её пересказ).
+Хранится в `lectures.quiz` JSONB, `GET` отдаёт последний.
+
 ## Поиск
 
 Гибрид: pgvector (косинус, HNSW) + Postgres FTS (`russian`, GIN) → RRF (k=60).
@@ -59,7 +69,7 @@ BGE-M3 многоязычная: русский запрос находит ан
 `users, courses(owner_id), lectures(owner_id, course_id, status, summary,
 key_terms JSONB, …), segments, chunks(embedding vector(1024), search_vector
 tsvector), chapters(level 1|2), enrollments, watch_progress, favorites,
-bookmarks, search_queries`. Миграции Alembic, FK с именами (иначе откат
+bookmarks, search_queries`; `lectures.quiz` JSONB. Миграции Alembic, FK с именами (иначе откат
 падает). Размерность 1024 зашита — смена модели эмбеддингов = миграция + `lectio reindex`.
 
 Файлы: `storage/lectures/<id>/{video.*, thumbnail.jpg}`, `storage/avatars/`.

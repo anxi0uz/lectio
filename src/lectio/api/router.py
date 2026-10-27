@@ -9,6 +9,7 @@ from lectio.modules.favorites.router import router as fr
 from lectio.modules.lectures.router import router as lr
 from lectio.modules.progress.router import router as pr
 from lectio.modules.qa.router import router as qr
+from lectio.modules.quizzes.router import router as qzr
 from lectio.modules.search.router import router as sr
 from lectio.modules.summaries.router import router as smr
 from lectio.modules.transcripts.router import router as tr
@@ -23,6 +24,7 @@ api_router.include_router(er)
 api_router.include_router(lr)
 api_router.include_router(tr)
 api_router.include_router(smr)
+api_router.include_router(qzr)
 api_router.include_router(sr)
 api_router.include_router(qr)
 api_router.include_router(pr)
