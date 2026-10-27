@@ -1,43 +1,75 @@
 import { Check, GraduationCap, RotateCcw, Sparkles, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { useGenerateQuiz, useQuiz } from '../../api/hooks';
-import type { Lecture, QuizQuestion } from '../../api/types';
+import { useGenerateQuiz, useQuiz, useSaveQuizAttempt } from '../../api/hooks';
+import type { Lecture, QuizAttempt, QuizQuestion } from '../../api/types';
 import { Empty, Spinner, useToast } from '../../components/ui';
-import { timecode } from '../../lib/format';
+import { relativeDate, timecode } from '../../lib/format';
 
 const LETTERS = ['А', 'Б', 'В', 'Г', 'Д'];
+
+interface Picks {
+  /** The quiz version (its fetch time) the answers were given for. */
+  version: number;
+  chosen: Record<number, number>;
+  /** All questions answered and sent. */
+  saved: boolean;
+}
 
 export function QuizTab({
   lecture,
   signedIn,
+  canManage,
+  attempt,
   onSeek,
 }: {
   lecture: Lecture;
   signedIn: boolean;
+  canManage: boolean;
+  /** The user's saved answers, if they took this quiz before. */
+  attempt: QuizAttempt | null | undefined;
   onSeek: (seconds: number) => void;
 }) {
   const toast = useToast();
   const quiz = useQuiz(lecture);
   const generate = useGenerateQuiz(lecture.id);
-  // Chosen option per question index, tied to the quiz version it was given
-  // for: a regenerated quiz starts unanswered.
-  const [picks, setPicks] = useState<{ version: number; chosen: Record<number, number> }>({
-    version: 0,
-    chosen: {},
-  });
+  const save = useSaveQuizAttempt(lecture.id);
+  const [picks, setPicks] = useState<Picks>({ version: 0, chosen: {}, saved: true });
   const questions = quiz.data?.questions ?? [];
-  const chosen = picks.version === quiz.dataUpdatedAt ? picks.chosen : {};
-  const choose = (index: number, option: number) =>
-    setPicks((current) => ({
-      version: quiz.dataUpdatedAt,
-      chosen: { ...(current.version === quiz.dataUpdatedAt ? current.chosen : {}), [index]: option },
-    }));
+  const version = quiz.dataUpdatedAt;
+  // Until the user touches this quiz, show the answers they saved earlier.
+  const restored = attempt?.answers.length === questions.length ? { ...attempt.answers } : {};
+  const current: Picks =
+    picks.version === version ? picks : { version, chosen: restored, saved: true };
+  const chosen = current.chosen;
+  const answered = Object.keys(chosen).length;
+  const finished = questions.length > 0 && answered === questions.length;
 
-  const run = () =>
+  const choose = (index: number, option: number) =>
+    setPicks((previous) => {
+      const base = previous.version === version ? previous.chosen : restored;
+      return { version, chosen: { ...base, [index]: option }, saved: false };
+    });
+
+  useEffect(() => {
+    if (!signedIn || !finished || current.saved) return;
+
+    setPicks({ ...current, saved: true });
+    save.mutate(
+      questions.map((_, index) => chosen[index]!),
+      { onError: (error) => toast(error.message, { error: true }) },
+    );
+  });
+
+  const run = () => {
+    if (questions.length && !window.confirm('Составить новый тест? Ответы учеников на текущий будут сброшены.')) {
+      return;
+    }
+
     generate.mutate(undefined, {
       onError: (error) => toast(error.message, { error: true }),
     });
+  };
 
   if (lecture.status !== 'ready') {
     return (
@@ -63,31 +95,37 @@ export function QuizTab({
     return (
       <Empty
         icon={<GraduationCap size={22} />}
-        title="Проверьте себя"
+        title={canManage ? 'Составьте тест для студентов' : 'Теста пока нет'}
         action={
-          signedIn && (
+          canManage && (
             <button className="btn btn-primary btn-sm" onClick={run}>
               <Sparkles size={14} /> Составить тест
             </button>
           )
         }
       >
-        {signedIn
-          ? 'Несколько вопросов по лекции с вариантами ответа. После ответа покажем пояснение и момент видео, где об этом говорят.'
-          : 'Войдите, чтобы составить тест по этой лекции.'}
+        {canManage
+          ? 'Модель составит вопросы с вариантами по расшифровке. Студенты увидят тест сразу, а вы — кто как ответил.'
+          : 'Преподаватель ещё не составил тест по этой лекции.'}
       </Empty>
     );
   }
 
-  const answered = Object.keys(chosen).length;
   const correct = questions.filter((question, index) => chosen[index] === question.answer).length;
-  const finished = answered === questions.length;
 
   return (
     <div className="quiz">
       <div className="quiz-head">
         <span className="label muted">
-          {finished ? 'Результат' : `Отвечено ${answered} из ${questions.length}`}
+          {!finished
+            ? `Отвечено ${answered} из ${questions.length}`
+            : !signedIn
+              ? 'Результат · войдите, чтобы сохранить'
+              : save.isPending
+                ? 'Сохраняем результат'
+                : attempt
+                  ? `Результат сохранён · ${relativeDate(attempt.updated_at)}`
+                  : 'Результат'}
         </span>
         {finished && (
           <span className="quiz-score">
@@ -98,7 +136,7 @@ export function QuizTab({
 
       {questions.map((question, index) => (
         <QuestionCard
-          key={`${quiz.dataUpdatedAt}-${index}`}
+          key={`${version}-${index}`}
           number={index + 1}
           question={question}
           chosen={chosen[index] ?? -1}
@@ -108,10 +146,14 @@ export function QuizTab({
       ))}
 
       <div className="quiz-actions">
-        <button className="btn btn-sm" onClick={() => setPicks({ version: 0, chosen: {} })} disabled={!answered}>
+        <button
+          className="btn btn-sm"
+          onClick={() => setPicks({ version, chosen: {}, saved: true })}
+          disabled={!answered}
+        >
           <RotateCcw size={14} /> Пройти заново
         </button>
-        {signedIn && (
+        {canManage && (
           <button className="btn btn-ghost btn-sm" onClick={run}>
             <Sparkles size={14} /> Другие вопросы
           </button>

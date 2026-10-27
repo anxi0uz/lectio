@@ -1,4 +1,4 @@
-import { FileText, Heart, Link2, RefreshCw, Trash2 } from 'lucide-react';
+import { FileText, Heart, Link2, RefreshCw, ThumbsUp, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -7,15 +7,18 @@ import {
   isSearchable,
   saveProgress,
   useBookmarkActions,
+  useComments,
   useCourse,
   useEnrollment,
   useLecture,
   useLectureActions,
   useLectureState,
+  useLectureStats,
   useLectures,
   useSegments,
   useSummary,
   useToggleFavorite,
+  useToggleLike,
   useUser,
 } from '../../api/hooks';
 import type { SearchHit } from '../../api/types';
@@ -24,13 +27,15 @@ import { Avatar, Empty, Skeleton, useToast } from '../../components/ui';
 import { fullName, timecode } from '../../lib/format';
 import { ChatPanel } from './ChatPanel';
 import { CourseContent } from './CourseContent';
+import { DiscussionTab } from './DiscussionTab';
 import { Player } from './Player';
 import { ProcessingCard } from './ProcessingCard';
 import { QuizTab } from './QuizTab';
+import { StatsTab } from './StatsTab';
 import { BookmarksTab, ChaptersTab, SummaryTab, TermsTab, TranscriptTab } from './Tabs';
 import { NowSpeaking } from './TranscriptPanel';
 
-type Tab = 'summary' | 'chapters' | 'terms' | 'quiz' | 'transcript' | 'notes';
+type Tab = 'summary' | 'chapters' | 'terms' | 'quiz' | 'transcript' | 'notes' | 'discussion' | 'stats';
 
 const PROGRESS_SAVE_MS = 10_000;
 const LANGUAGES: Record<string, string> = { ru: 'Русский', en: 'English' };
@@ -52,6 +57,9 @@ export function LecturePage() {
   const { data: courseLectures = [] } = useLectures({ courseId: lecture?.course_id ?? undefined });
   const actions = useLectureActions(id);
   const favorite = useToggleFavorite(id);
+  const like = useToggleLike(id);
+  const lectureStats = useLectureStats(id);
+  const comments = useComments(id);
   const bookmarks = useBookmarkActions(id);
   const enrollment = useEnrollment(lecture?.course_id ?? '');
 
@@ -158,8 +166,10 @@ export function LecturePage() {
         { key: 'quiz', label: 'Тест' },
         { key: 'transcript', label: 'Расшифровка' },
         { key: 'notes', label: 'Мои заметки', count: lectureBookmarks.length },
+        { key: 'discussion', label: 'Обсуждение', count: comments.data?.length },
+        ...(canManage ? [{ key: 'stats', label: 'Статистика' }] : []),
       ] as { key: Tab; label: string; count?: number }[],
-    [chapters.length, terms.length, lectureBookmarks.length],
+    [chapters.length, terms.length, lectureBookmarks.length, comments.data?.length, canManage],
   );
 
   if (lectureQuery.isError) {
@@ -244,6 +254,22 @@ export function LecturePage() {
                 <Heart size={16} fill={state?.is_favorite ? 'currentColor' : 'none'} />
                 {state?.is_favorite ? 'В избранном' : 'В избранное'}
               </button>
+            )}
+            {user ? (
+              <button
+                className={`btn${state?.is_liked ? ' btn-active' : ''}`}
+                onClick={() => like.mutate(!state?.is_liked)}
+                aria-label={state?.is_liked ? 'Убрать лайк' : 'Нравится'}
+              >
+                <ThumbsUp size={16} fill={state?.is_liked ? 'currentColor' : 'none'} />
+                {lectureStats.data?.likes ?? 0}
+              </button>
+            ) : (
+              !!lectureStats.data?.likes && (
+                <span className="btn" aria-label="Лайки" style={{ cursor: 'default' }}>
+                  <ThumbsUp size={16} /> {lectureStats.data.likes}
+                </span>
+              )
             )}
             {course && user && !state?.is_enrolled_in_course && (
               <button className="btn" onClick={() => enrollment.enroll.mutate()} disabled={enrollment.enroll.isPending}>
@@ -339,7 +365,15 @@ export function LecturePage() {
             )}
             {tab === 'chapters' && <ChaptersTab chapters={chapters} time={time} onSeek={seek} />}
             {tab === 'terms' && <TermsTab terms={terms} onSeek={seek} />}
-            {tab === 'quiz' && <QuizTab lecture={lecture} signedIn={!!user} onSeek={seek} />}
+            {tab === 'quiz' && (
+              <QuizTab
+                lecture={lecture}
+                signedIn={!!user}
+                canManage={canManage}
+                attempt={state?.quiz_attempt}
+                onSeek={seek}
+              />
+            )}
             {tab === 'transcript' && (
               <TranscriptTab lectureId={id} segments={segments} time={time} onSeek={seek} />
             )}
@@ -352,6 +386,10 @@ export function LecturePage() {
                 onSeek={seek}
               />
             )}
+            {tab === 'discussion' && (
+              <DiscussionTab lectureId={id} user={user} canManage={canManage} time={time} onSeek={seek} />
+            )}
+            {tab === 'stats' && canManage && <StatsTab lectureId={id} />}
           </div>
 
           {owner && (

@@ -103,6 +103,27 @@ export interface Quiz {
   questions: QuizQuestion[];
 }
 
+export interface QuizAttempt {
+  /** Chosen option index per question. */
+  answers: number[];
+  correct: number;
+  total: number;
+  updated_at: string;
+}
+
+export interface QuizStats {
+  attempts: number;
+  average_share: number | null;
+  questions: {
+    question: string;
+    options: string[];
+    answer: number;
+    option_counts: number[];
+    correct_share: number;
+  }[];
+  students: { user: PublicUser; correct: number; total: number; updated_at: string }[];
+}
+
 export interface Summary {
   lecture_id: string;
   status: LectureStatus;
@@ -179,7 +200,30 @@ export interface Dashboard {
 export interface LectureState {
   progress: Progress;
   is_favorite: boolean;
+  is_liked: boolean;
   is_enrolled_in_course: boolean;
   can_manage: boolean;
   bookmarks: Bookmark[];
+  quiz_attempt: QuizAttempt | null;
+}
+
+export interface LectureStats {
+  viewers: number;
+  completed: number;
+  average_watched_share: number | null;
+  likes: number;
+  comments: number;
+  favorites: number;
+  bookmarks: number;
+  quiz_attempts: number;
+  quiz_average_share: number | null;
+}
+
+export interface Comment {
+  id: string;
+  lecture_id: string;
+  author: PublicUser;
+  text: string;
+  position_seconds: number | null;
+  created_at: string;
 }

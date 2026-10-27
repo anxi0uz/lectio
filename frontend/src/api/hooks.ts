@@ -10,13 +10,17 @@ import { ApiError, api, refreshSession, uploadWithProgress } from './client';
 import type {
   Bookmark,
   BookmarkWithLecture,
+  Comment,
   Course,
   Dashboard,
   EnrolledCourse,
   Lecture,
   LectureState,
+  LectureStats,
   Progress,
   Quiz,
+  QuizAttempt,
+  QuizStats,
   PublicUser,
   RecentSearch,
   SearchHit,
@@ -94,8 +98,82 @@ export function useGenerateQuiz(id: string) {
 
   return useMutation({
     mutationFn: () => api<Quiz>(`/lectures/${id}/quiz`, { method: 'POST' }),
-    onSuccess: (quiz) => client.setQueryData(['quiz', id], quiz),
+    onSuccess: (quiz) => {
+      client.setQueryData(['quiz', id], quiz);
+      // A new quiz drops everyone's answers.
+      client.invalidateQueries({ queryKey: ['lecture-state', id] });
+      client.invalidateQueries({ queryKey: ['quiz-stats', id] });
+      client.invalidateQueries({ queryKey: ['lecture-stats', id] });
+    },
   });
+}
+
+export function useSaveQuizAttempt(id: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (answers: number[]) =>
+      api<QuizAttempt>(`/lectures/${id}/quiz/attempt`, { method: 'PUT', body: { answers } }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['lecture-state', id] });
+      client.invalidateQueries({ queryKey: ['quiz-stats', id] });
+      client.invalidateQueries({ queryKey: ['lecture-stats', id] });
+    },
+  });
+}
+
+export function useQuizStats(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['quiz-stats', id],
+    queryFn: () => api<QuizStats>(`/lectures/${id}/quiz/stats`),
+    enabled,
+  });
+}
+
+export function useLectureStats(id: string) {
+  return useQuery({
+    queryKey: ['lecture-stats', id],
+    queryFn: () => api<LectureStats>(`/lectures/${id}/stats`),
+  });
+}
+
+export function useToggleLike(id: string) {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (liked: boolean) => api<null>(`/lectures/${id}/like`, { method: liked ? 'PUT' : 'DELETE' }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['lecture-state', id] });
+      client.invalidateQueries({ queryKey: ['lecture-stats', id] });
+    },
+  });
+}
+
+export function useComments(id: string) {
+  return useQuery({
+    queryKey: ['comments', id],
+    queryFn: () => api<Comment[]>(`/lectures/${id}/comments`),
+  });
+}
+
+export function useCommentActions(id: string) {
+  const client = useQueryClient();
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ['comments', id] });
+    client.invalidateQueries({ queryKey: ['lecture-stats', id] });
+  };
+
+  return {
+    create: useMutation({
+      mutationFn: (body: { text: string; position_seconds?: number }) =>
+        api<Comment>(`/lectures/${id}/comments`, { method: 'POST', body }),
+      onSuccess: refresh,
+    }),
+    remove: useMutation({
+      mutationFn: (commentId: string) => api<null>(`/lectures/${id}/comments/${commentId}`, { method: 'DELETE' }),
+      onSuccess: refresh,
+    }),
+  };
 }
 
 export function useLectureState(id: string | undefined) {

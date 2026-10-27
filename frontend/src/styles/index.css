@@ -2068,6 +2068,157 @@ a.time-chip:hover {
   border-top: 1px solid var(--line);
 }
 
+/* lecture stats (teacher) */
+
+.section-label {
+  margin-bottom: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lecture-stats .stat-value {
+  font-size: 36px;
+}
+
+.lecture-stats .stat:nth-child(4n + 1) {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.lecture-stats .stat:nth-child(n + 5) {
+  border-top: 1px solid var(--line);
+}
+
+.quiz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0 20px;
+  border-top: 1px solid var(--line);
+}
+
+.quiz-stat .quiz-q {
+  font-size: 17px;
+}
+
+.quiz-stat-share {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.quiz-stat-option {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(80px, 160px) 28px;
+  gap: 12px;
+  align-items: center;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.quiz-stat-option.correct {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.quiz-stat-option.correct .quiz-letter {
+  border-color: var(--success);
+  background: var(--success);
+  color: var(--paper);
+}
+
+.quiz-stat-count {
+  font-family: var(--mono);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.student-result {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.student-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.student-score {
+  min-width: 56px;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* discussion */
+
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.comment-moment {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--ink-2);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.comment {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.comment-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.comment-text {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* bookmarks */
 
 .bookmark {
@@ -2316,6 +2467,16 @@ a.time-chip:hover {
   .stat:nth-child(n + 3) {
     border-top: 1px solid var(--line);
   }
+
+  .lecture-stats .stat:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .lecture-stats .stat:nth-child(even) {
+    padding-left: 24px;
+    border-left: 1px solid var(--line);
+  }
 }
 
 @media (max-width: 860px) {
@@ -2360,6 +2521,14 @@ a.time-chip:hover {
 }
 
 @media (max-width: 520px) {
+  .quiz-stat-option {
+    grid-template-columns: 24px minmax(0, 1fr) 28px;
+  }
+
+  .quiz-stat-bar {
+    display: none;
+  }
+
   .hero-search {
     flex-direction: column;
   }

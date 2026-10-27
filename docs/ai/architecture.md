@@ -44,13 +44,25 @@
 
 ## Тест по лекции (`modules/quizzes`)
 
-Не в конвейере, а по запросу `POST /lectures/{id}/quiz` (нужен вход):
+Не в конвейере, а по запросу `POST /lectures/{id}/quiz` (только тот, кто
+управляет лекцией):
 части расшифровки как у конспекта, берутся до 3 равномерно, 6 вопросов.
 Модель отдаёт `correct` + `wrong[]`, сервер сам перемешивает варианты
 (иначе маленькая модель ставит верный первым) и «примагничивает» таймкод.
 Вопрос отбрасывается, если вариантов < 3 или верный в 2+ раза длиннее
 неверных (выдаёт себя; обычно это цитата, а неверный — её пересказ).
-Хранится в `lectures.quiz` JSONB, `GET` отдаёт последний.
+Хранится в `lectures.quiz` JSONB, `GET` отдаёт последний. Ответы —
+`quiz_attempts` (одна последняя попытка на пользователя, счёт считает
+сервер); новый тест удаляет все попытки. Статистика теста — только
+управляющему лекцией.
+
+## Вовлечённость
+
+Лайки (`lecture_likes`), комментарии (`comments`, необязательный
+`position_seconds`; удаляет автор или управляющий лекцией),
+`GET /lectures/{id}/stats` — публичные агрегаты без имён (зрители =
+строки `watch_progress`). `/lectures/{id}/me` отдаёт `is_liked` и
+`quiz_attempt`.
 
 ## Поиск
 
@@ -69,7 +81,8 @@ BGE-M3 многоязычная: русский запрос находит ан
 `users, courses(owner_id), lectures(owner_id, course_id, status, summary,
 key_terms JSONB, …), segments, chunks(embedding vector(1024), search_vector
 tsvector), chapters(level 1|2), enrollments, watch_progress, favorites,
-bookmarks, search_queries`; `lectures.quiz` JSONB. Миграции Alembic, FK с именами (иначе откат
+bookmarks, search_queries, lecture_likes, comments, quiz_attempts`;
+`lectures.quiz` JSONB. Миграции Alembic, FK с именами (иначе откат
 падает). Размерность 1024 зашита — смена модели эмбеддингов = миграция + `lectio reindex`.
 
 Файлы: `storage/lectures/<id>/{video.*, thumbnail.jpg}`, `storage/avatars/`.
