@@ -89,6 +89,19 @@ export interface KeyTerm {
   start_seconds: number | null;
 }
 
+export interface TermMention {
+  lecture_id: string;
+  lecture_title: string;
+  course_id: string | null;
+  definition: string;
+  start_seconds: number | null;
+}
+
+export interface GlossaryEntry {
+  term: string;
+  mentions: TermMention[];
+}
+
 export interface QuizQuestion {
   question: string;
   options: string[];

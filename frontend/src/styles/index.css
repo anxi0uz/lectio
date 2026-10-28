@@ -1941,6 +1941,89 @@ a.time-chip:hover {
   flex: 1;
 }
 
+/* glossary */
+
+.glossary-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.glossary-search {
+  position: relative;
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+}
+
+.glossary-search svg {
+  position: absolute;
+  left: 14px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.glossary-search .input {
+  width: 100%;
+  padding-left: 40px;
+}
+
+.glossary-filters .select {
+  flex: 0 1 260px;
+}
+
+.glossary-letters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-bottom: 24px;
+  font-family: var(--mono);
+  font-size: 15px;
+}
+
+.glossary-letters a {
+  color: var(--accent);
+}
+
+.glossary-letter {
+  margin-top: 32px;
+  scroll-margin-top: 112px;
+}
+
+.glossary-letter h2 {
+  font-family: var(--display);
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.glossary-mention {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.glossary-source {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.glossary-source:hover,
+.glossary-source:hover .time-chip {
+  color: var(--accent);
+}
+
+.glossary-mention + .glossary-mention {
+  padding-top: 10px;
+  border-top: 1px dashed var(--hair);
+}
+
 /* quiz */
 
 .quiz {

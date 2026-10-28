@@ -79,6 +79,7 @@ function Header() {
           <NavItem to="/" end label="Главная" />
           <NavItem to="/courses" label="Курсы" />
           <NavItem to="/lectures" label="Лекции" />
+          <NavItem to="/glossary" label="Термины" />
           {user && <NavItem to="/bookmarks" label="Мои заметки" />}
           {user && <NavItem to="/favorites" label="Избранное" />}
           {user && <NavItem to="/leaderboard" label="Рейтинг" />}

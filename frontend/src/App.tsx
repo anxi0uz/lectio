@@ -12,6 +12,7 @@ import { BookmarksPage } from './pages/BookmarksPage';
 import { CoursePage } from './pages/CoursePage';
 import { CoursesPage } from './pages/CoursesPage';
 import { FavoritesPage } from './pages/FavoritesPage';
+import { GlossaryPage } from './pages/GlossaryPage';
 import { HomePage } from './pages/HomePage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { LecturePage } from './pages/lecture/LecturePage';
@@ -84,6 +85,7 @@ export function App() {
                 <Route path="courses" element={<CoursesPage />} />
                 <Route path="courses/:id" element={<CoursePage />} />
                 <Route path="search" element={<SearchPage />} />
+                <Route path="glossary" element={<GlossaryPage />} />
                 <Route path="favorites" element={<RequireAuth><FavoritesPage /></RequireAuth>} />
                 <Route path="bookmarks" element={<RequireAuth><BookmarksPage /></RequireAuth>} />
                 <Route path="profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

@@ -8,6 +8,7 @@ from lectio.modules.dashboard.router import router as dr
 from lectio.modules.enrollments.router import router as er
 from lectio.modules.favorites.router import router as fr
 from lectio.modules.gamification.router import router as gr
+from lectio.modules.glossary.router import router as glr
 from lectio.modules.lectures.router import router as lr
 from lectio.modules.likes.router import router as lkr
 from lectio.modules.progress.router import router as pr
@@ -37,3 +38,4 @@ api_router.include_router(cmr)
 api_router.include_router(br)
 api_router.include_router(dr)
 api_router.include_router(gr)
+api_router.include_router(glr)

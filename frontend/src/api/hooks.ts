@@ -15,6 +15,7 @@ import type {
   Course,
   Dashboard,
   EnrolledCourse,
+  GlossaryEntry,
   Leaderboard,
   Lecture,
   LectureState,
@@ -282,6 +283,20 @@ export function useLectureActions(id: string) {
       onSuccess: refresh,
     }),
   };
+}
+
+/* ---------- glossary ---------- */
+
+export function useGlossary(query: string, courseId: string) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (courseId) params.set('course_id', courseId);
+
+  return useQuery({
+    queryKey: ['glossary', query, courseId],
+    queryFn: () => api<GlossaryEntry[]>(`/glossary?${params}`),
+    placeholderData: keepPreviousData,
+  });
 }
 
 /* ---------- courses ---------- */
