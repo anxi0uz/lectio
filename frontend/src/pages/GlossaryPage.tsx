@@ -36,7 +36,7 @@ export function GlossaryPage() {
       <section className="page-header">
         <div>
           <div className="eyebrow">По всем лекциям</div>
-          <h1>Энциклопедия терминов</h1>
+          <h1>Глоссарий</h1>
           <p>
             Ключевые понятия из конспектов всех лекций. Новые лекции попадают сюда сами, как только готов конспект.
           </p>

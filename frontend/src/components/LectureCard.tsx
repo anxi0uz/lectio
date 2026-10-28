@@ -57,8 +57,10 @@ export function LectureCard({
     <Link to={`/lectures/${lecture.id}${watched ? `?t=${Math.floor(watched)}` : ''}`} className="lecture-card">
       <Thumbnail lecture={lecture} watched={watched} />
       <div className="lecture-card-body">
-        {courseTitle && <span className="eyebrow" style={{ margin: 0 }}>{courseTitle}</span>}
         <div className="lecture-card-title">{lecture.title}</div>
+        {/* Under the title, so titles line up across a row whether or not
+            a lecture belongs to a course. */}
+        {courseTitle && <span className="eyebrow" style={{ margin: 0 }}>{courseTitle}</span>}
         <div className="lecture-card-meta">
           {lecture.status === 'ready' ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>

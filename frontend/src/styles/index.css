@@ -175,7 +175,7 @@ mark {
 .nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 22px;
+  gap: 4px 18px;
 }
 
 .nav-link {
@@ -196,7 +196,10 @@ mark {
 
 .header-search {
   position: relative;
-  flex: 0 1 380px;
+  /* A small basis lets the search shrink before the header wraps a row;
+     it grows back to full width where there is room. */
+  flex: 1 1 200px;
+  max-width: 380px;
   margin-left: auto;
 }
 
