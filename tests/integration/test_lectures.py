@@ -1,12 +1,20 @@
+import asyncio
+import time
 from uuid import UUID
 
 import pytest
 from httpx import AsyncClient, Response
 from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from lectio.core.config import get_settings
 from lectio.core.jobs import JOBS_QUEUE_KEY, Job, JobKind
-from tests.support import RegisteredUser, sample_media
+from lectio.core.media import RemoteVideo
+from lectio.db.session import get_session_factory
+from lectio.modules.lectures.exceptions import DuplicateLectureError
+from lectio.modules.lectures.schemas import LectureImport
+from lectio.modules.lectures.service import create_imported_lecture
+from tests.support import RegisteredUser, fake_url_probe, sample_media
 
 pytestmark = pytest.mark.anyio
 
@@ -296,3 +304,82 @@ async def test_thumbnail_is_cut_from_the_video(
     assert again.content == first.content
     assert audio["thumbnail_url"] is None
     assert audio_thumbnail.status_code == 404
+
+
+async def test_repeated_video_is_offered_instead_of_reprocessed(
+    client: AsyncClient,
+    teacher: RegisteredUser,
+    test_redis: Redis,
+) -> None:
+    async def upload(allow_duplicate: bool = False) -> Response:
+        return await client.post(
+            "/api/v1/lectures",
+            headers=teacher.headers,
+            files={"file": ("a.mp4", sample_media("video"), "video/mp4")},
+            data={"allow_duplicate": str(allow_duplicate).lower()},
+        )
+
+    async def import_url(url: str, allow_duplicate: bool = False) -> Response:
+        return await client.post(
+            "/api/v1/lectures/import",
+            headers=teacher.headers,
+            json={"url": url, "allow_duplicate": allow_duplicate},
+        )
+
+    first_upload = (await upload()).json()
+    same_file = await upload()
+    forced_upload = await upload(allow_duplicate=True)
+
+    assert same_file.status_code == 409
+    assert same_file.json()["code"] == "lecture_duplicate"
+    assert same_file.json()["lecture_id"] == first_upload["id"]
+    assert forced_upload.status_code == 202
+
+    first_import = (await import_url("https://www.youtube.com/watch?v=abc")).json()
+    # Another link form of the same video.
+    same_video = await import_url("https://www.youtube.com/watch?v=abc&t=60s")
+    forced_import = await import_url(
+        "https://www.youtube.com/watch?v=abc",
+        allow_duplicate=True,
+    )
+    other_video = await import_url("https://www.youtube.com/watch?v=xyz")
+
+    assert same_video.status_code == 409
+    assert same_video.json()["lecture_id"] == first_import["id"]
+    assert same_video.json()["title"] == "Видео со страницы"
+    assert forced_import.status_code == 202
+    assert other_video.status_code == 202
+    # Rejected duplicates are never queued.
+    assert len(await _queued_jobs(test_redis)) == 5
+
+
+async def test_simultaneous_imports_of_one_video_create_one_lecture(
+    test_engine: AsyncEngine,
+) -> None:
+    def slow_probe(url: str) -> RemoteVideo:
+        # Both requests are past the page check before either reaches the
+        # duplicate check, as with two teachers pressing at the same moment.
+        time.sleep(0.3)
+        return fake_url_probe(url)
+
+    async def import_once() -> str:
+        async with get_session_factory()() as session:
+            try:
+                lecture = await create_imported_lecture(
+                    session,
+                    None,
+                    LectureImport.model_validate(
+                        {"url": "https://www.youtube.com/watch?v=race"},
+                    ),
+                    slow_probe,
+                )
+            except DuplicateLectureError:
+                await session.rollback()
+                return "duplicate"
+
+            await session.commit()
+            return str(lecture.id)
+
+    results = await asyncio.gather(import_once(), import_once())
+
+    assert results.count("duplicate") == 1

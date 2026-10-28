@@ -17,9 +17,12 @@ class DomainError(Exception):
         detail: str | None = None,
         *,
         headers: Mapping[str, str] | None = None,
+        extra: Mapping[str, str] | None = None,
     ) -> None:
         self.detail = detail or self.default_detail
         self.headers = dict(headers or {})
+        # Fields a client needs to act on the error, added to the body.
+        self.extra = dict(extra or {})
         super().__init__(self.detail)
 
 

@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from fastapi import status
 
 from lectio.core.exceptions import ConflictError, DomainError, NotFoundError
+
+if TYPE_CHECKING:
+    from lectio.models import Lecture
 
 
 class LectureNotFoundError(NotFoundError):
@@ -13,6 +18,20 @@ class LectureNotReadyError(ConflictError):
 
 class LectureBusyError(ConflictError):
     default_detail = "Lecture is already being processed"
+
+
+class DuplicateLectureError(ConflictError):
+    default_detail = "This video has already been added"
+    code = "lecture_duplicate"
+
+    def __init__(self, existing: "Lecture") -> None:
+        super().__init__(
+            extra={
+                "lecture_id": str(existing.id),
+                "title": existing.title,
+            },
+        )
+        self.lecture_id = existing.id
 
 
 class VideoNotAvailableError(NotFoundError):

@@ -27,6 +27,8 @@ class LectureImport(BaseModel):
     url: AnyHttpUrl
     title: LectureTitle | None = None
     course_id: UUID | None = None
+    # Import even if this video is already in the library.
+    allow_duplicate: bool = False
 
 
 class LectureUpdate(BaseModel):

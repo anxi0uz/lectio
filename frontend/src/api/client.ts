@@ -7,8 +7,14 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The error body: `code` and any fields the client can act on. */
+    readonly data: Record<string, unknown> = {},
   ) {
     super(message);
+  }
+
+  get code(): string | undefined {
+    return typeof this.data.code === 'string' ? this.data.code : undefined;
   }
 }
 
@@ -57,16 +63,16 @@ const CODE_MESSAGES: Record<string, string> = {
   quiz_missing: 'Преподаватель ещё не составил тест',
   quiz_answers_mismatch: 'Тест изменился — обновите страницу',
   lecture_not_ready: 'Лекция ещё обрабатывается — попробуйте, когда она будет готова',
+  lecture_duplicate: 'Эта лекция уже есть в библиотеке',
 };
 
 export function messageForCode(code: string | null | undefined): string | undefined {
   return code ? CODE_MESSAGES[code] : undefined;
 }
 
-async function errorMessage(response: Response): Promise<string> {
-  const data = await response.json().catch(() => null);
+function errorMessage(status: number, data: Record<string, unknown> | null): string {
   const detail = data?.detail;
-  const byCode = messageForCode(data?.code);
+  const byCode = messageForCode(data?.code as string | undefined);
 
   if (byCode) return byCode;
 
@@ -76,7 +82,13 @@ async function errorMessage(response: Response): Promise<string> {
 
   // Domain errors carry an English detail meant for developers; users get a
   // Russian message for the status instead.
-  return STATUS_MESSAGES[response.status] ?? 'Что-то пошло не так';
+  return STATUS_MESSAGES[status] ?? 'Что-то пошло не так';
+}
+
+async function toApiError(response: Response): Promise<ApiError> {
+  const data = await response.json().catch(() => null);
+
+  return new ApiError(errorMessage(response.status, data), response.status, data ?? {});
 }
 
 type RequestOptions = {
@@ -121,7 +133,7 @@ export async function api<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError(await errorMessage(response), response.status);
+    throw await toApiError(response);
   }
 
   return (response.status === 204 ? null : await response.json()) as T;
@@ -150,8 +162,8 @@ export function uploadWithProgress<T>(
         return;
       }
 
-      errorMessage(new Response(xhr.responseText, { status: xhr.status })).then(
-        (message) => reject(new ApiError(message, xhr.status)),
+      toApiError(new Response(xhr.responseText, { status: xhr.status })).then(
+        (error) => reject(error),
       );
     };
     xhr.onerror = () => reject(new ApiError('Сервер недоступен', 0));
@@ -193,7 +205,7 @@ export async function streamEvents(
   }
 
   if (!response.ok || !response.body) {
-    throw new ApiError(await errorMessage(response), response.status);
+    throw await toApiError(response);
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();

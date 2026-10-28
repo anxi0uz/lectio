@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,8 @@ class RemoteVideo:
     title: str | None
     duration: float | None
     is_live: bool
+    # "youtube:<id>" — the same for every link form of one video.
+    key: str | None = None
 
 
 class UrlProbeError(RuntimeError):
@@ -148,4 +151,15 @@ def probe_url(url: str) -> RemoteVideo:
         title=info.get("title"),
         duration=info.get("duration"),
         is_live=bool(info.get("is_live")),
+        key=_video_key(info),
     )
+
+
+def _video_key(info: Mapping[str, Any]) -> str | None:
+    extractor = info.get("extractor_key")
+    video_id = info.get("id")
+
+    if not extractor or not video_id:
+        return None
+
+    return f"{str(extractor).lower()}:{video_id}"[:200]

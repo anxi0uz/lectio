@@ -68,6 +68,7 @@ async def upload_lecture_endpoint(
     file: Annotated[UploadFile, File()],
     title: Annotated[str | None, Form(max_length=300)] = None,
     course_id: Annotated[UUID | None, Form()] = None,
+    allow_duplicate: Annotated[bool, Form()] = False,
 ) -> LectureResponse:
     lecture = await create_uploaded_lecture(
         db,
@@ -75,6 +76,7 @@ async def upload_lecture_endpoint(
         file,
         title.strip() if title else None,
         course_id,
+        allow_duplicate,
     )
 
     background_tasks.add_task(

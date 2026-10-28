@@ -1,7 +1,8 @@
 import { CloudUpload, FileVideo, Link2, Plus } from 'lucide-react';
 import { type DragEvent, type FormEvent, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
+import { ApiError } from '../api/client';
 import { useCourses, useCreateCourse, useImportLecture, useUploadLecture } from '../api/hooks';
 import { useAuth } from '../auth/AuthProvider';
 import { Bar, useToast } from '../components/ui';
@@ -35,20 +36,38 @@ export function UploadPage() {
   const myCourses = courses.filter((course) => !course.owner_id || course.owner_id === user?.id);
   const busy = upload.isPending || importLecture.isPending || createCourse.isPending;
   const error = upload.error ?? importLecture.error ?? createCourse.error;
+  // The same video is already in the library: offer it instead of a second run.
+  const duplicate = error instanceof ApiError && error.code === 'lecture_duplicate' ? error.data : null;
+
+  // A new file or link makes an earlier error, such as a duplicate, stale.
+  const resetErrors = () => {
+    upload.reset();
+    importLecture.reset();
+  };
+
+  const pickFile = (picked: File | null) => {
+    resetErrors();
+    setFile(picked);
+  };
 
   const drop = (event: DragEvent) => {
     event.preventDefault();
     setOver(false);
     const dropped = event.dataTransfer.files[0];
-    if (dropped) setFile(dropped);
+    if (dropped) pickFile(dropped);
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
+    send(false);
+  };
 
+  const send = async (allowDuplicate: boolean) => {
     let targetCourse = courseId;
     if (courseId === 'new') {
       targetCourse = (await createCourse.mutateAsync({ title: newCourse.trim() })).id;
+      // A retry after a duplicate warning must not create the course twice.
+      setCourseId(targetCourse);
     }
 
     const done = (lectureId: string) => {
@@ -61,11 +80,17 @@ export function UploadPage() {
       form.append('file', file);
       if (title.trim()) form.append('title', title.trim());
       if (targetCourse) form.append('course_id', targetCourse);
+      if (allowDuplicate) form.append('allow_duplicate', 'true');
 
       upload.mutate({ form, onProgress: setProgress }, { onSuccess: (lecture) => done(lecture.id) });
     } else if (mode === 'url') {
       importLecture.mutate(
-        { url: url.trim(), title: title.trim() || undefined, course_id: targetCourse || undefined },
+        {
+          url: url.trim(),
+          title: title.trim() || undefined,
+          course_id: targetCourse || undefined,
+          allow_duplicate: allowDuplicate || undefined,
+        },
         { onSuccess: (lecture) => done(lecture.id) },
       );
     }
@@ -96,7 +121,24 @@ export function UploadPage() {
             </button>
           </div>
 
-          {error && <div className="alert alert-error">{error.message}</div>}
+          {duplicate ? (
+            <div className="alert duplicate-alert">
+              <span>
+                Эта лекция уже есть в библиотеке: <b>«{String(duplicate.title)}»</b>. Её не нужно обрабатывать
+                заново — можно сразу смотреть.
+              </span>
+              <div className="duplicate-actions">
+                <Link className="btn btn-primary btn-sm" to={`/lectures/${String(duplicate.lecture_id)}`}>
+                  Открыть лекцию
+                </Link>
+                <button type="button" className="btn btn-sm" disabled={busy} onClick={() => send(true)}>
+                  Всё равно добавить
+                </button>
+              </div>
+            </div>
+          ) : (
+            error && <div className="alert alert-error">{error.message}</div>
+          )}
 
           {mode === 'file' ? (
             <label
@@ -108,7 +150,7 @@ export function UploadPage() {
               onDragLeave={() => setOver(false)}
               onDrop={drop}
             >
-              <input type="file" accept={ACCEPT} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+              <input type="file" accept={ACCEPT} onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
               <CloudUpload size={32} strokeWidth={1.5} />
               {file ? (
                 <>
@@ -130,7 +172,10 @@ export function UploadPage() {
                 className="input"
                 placeholder="https://www.youtube.com/watch?v=…"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  resetErrors();
+                  setUrl(e.target.value);
+                }}
               />
               <span className="muted" style={{ fontSize: 13 }}>YouTube, Vimeo, RuTube и сотни других сайтов</span>
             </div>

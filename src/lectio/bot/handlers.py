@@ -22,9 +22,11 @@ from lectio.bot.service import (
     get_current_lecture,
     import_lecture,
     lecture_card,
+    pop_pending_link,
     recent_lectures,
     search_messages,
     set_current_lecture,
+    set_pending_link,
     suggested_question,
 )
 from lectio.core.exceptions import DomainError
@@ -36,6 +38,7 @@ from lectio.ml.llm import get_llm
 from lectio.ml.reranker import get_reranker
 from lectio.models import Lecture
 from lectio.models.enums import LectureStatus
+from lectio.modules.lectures.exceptions import DuplicateLectureError
 
 log = structlog.get_logger(
     component="bot.handlers",
@@ -277,27 +280,93 @@ async def link_handler(message: Message, bot: Bot) -> None:
     if match is None:
         return
 
+    await _start_import(bot, message.chat.id, match[0])
+
+
+@router.callback_query(F.data == "reimport")
+async def reimport_handler(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+
+    if callback.message is None:
+        return
+
+    chat_id = callback.message.chat.id
+    url = await pop_pending_link(get_redis_client(), chat_id)
+
+    if url is None:
+        await bot.send_message(chat_id, "Пришлите ссылку ещё раз.")
+        return
+
+    await _start_import(bot, chat_id, url, allow_duplicate=True)
+
+
+async def _start_import(
+    bot: Bot,
+    chat_id: int,
+    url: str,
+    allow_duplicate: bool = False,
+) -> None:
     redis = get_redis_client()
 
     async with get_session_factory()() as db:
         try:
-            lecture = await import_lecture(db, match[0])
+            lecture = await import_lecture(
+                db,
+                url,
+                allow_duplicate=allow_duplicate,
+            )
+        except DuplicateLectureError as error:
+            await _offer_existing(bot, chat_id, url, error)
+            return
         except DomainError as error:
-            await message.answer(_error_text(error))
+            await bot.send_message(chat_id, _error_text(error))
             return
 
         await db.commit()
 
     # After the commit, so the worker finds the row.
     await enqueue_job(redis, JobKind.PROCESS, lecture.id)
-    await set_current_lecture(redis, message.chat.id, lecture.id)
+    await set_current_lecture(redis, chat_id, lecture.id)
 
-    status = await message.answer(_status_text(lecture))
+    status = await bot.send_message(chat_id, _status_text(lecture))
     task = asyncio.create_task(
-        watch_processing(bot, message.chat.id, status.message_id, lecture.id),
+        watch_processing(bot, chat_id, status.message_id, lecture.id),
     )
     _watchers.add(task)
     task.add_done_callback(_watchers.discard)
+
+
+async def _offer_existing(
+    bot: Bot,
+    chat_id: int,
+    url: str,
+    error: DuplicateLectureError,
+) -> None:
+    await set_pending_link(get_redis_client(), chat_id, url)
+
+    title = html.escape(error.extra["title"])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Открыть лекцию",
+                    callback_data=f"lecture:{error.lecture_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Всё равно обработать заново",
+                    callback_data="reimport",
+                ),
+            ],
+        ],
+    )
+
+    await bot.send_message(
+        chat_id,
+        f"Эта лекция уже есть: «{title}». Открыть её или обработать заново?",
+        reply_markup=keyboard,
+    )
 
 
 @router.message(F.text)

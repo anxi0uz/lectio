@@ -80,6 +80,7 @@ def fake_url_probe(url: str) -> RemoteVideo:
         title="Видео со страницы",
         duration=36_000.0 if "long" in url else 600.0,
         is_live="live" in url,
+        key=f"youtube:{url.split('v=')[1].split('&')[0]}" if "v=" in url else None,
     )
 
 

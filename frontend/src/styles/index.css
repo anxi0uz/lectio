@@ -551,6 +551,23 @@ mark {
   color: var(--ink-2);
 }
 
+.duplicate-alert {
+  flex-direction: column;
+  gap: 12px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+
+.duplicate-alert b {
+  color: var(--ink);
+}
+
+.duplicate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .segmented {
   display: inline-flex;
   border: 1.5px solid var(--line);

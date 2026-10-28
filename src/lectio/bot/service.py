@@ -43,10 +43,16 @@ MAX_QUESTION_BUTTONS = 4
 GENERIC_QUESTION = "О чём эта лекция в двух словах?"
 # A chat keeps its lecture for a month of silence.
 CURRENT_LECTURE_TTL_SECONDS = 30 * 24 * 60 * 60
+# How long "add it anyway" stays valid after a duplicate link.
+PENDING_LINK_TTL_SECONDS = 60 * 60
 
 
 def _current_key(chat_id: int) -> str:
     return f"bot:chat:{chat_id}:lecture"
+
+
+def _pending_link_key(chat_id: int) -> str:
+    return f"bot:chat:{chat_id}:pending_link"
 
 
 async def set_current_lecture(
@@ -77,17 +83,49 @@ async def get_current_lecture(
     return UUID(value) if value else None
 
 
+async def set_pending_link(
+    redis: Redis,
+    chat_id: int,
+    url: str,
+) -> None:
+    # The link does not fit into 64 bytes of callback data, so the
+    # "add anyway" button finds it here.
+    await redis.set(
+        _pending_link_key(chat_id),
+        url,
+        ex=PENDING_LINK_TTL_SECONDS,
+    )
+
+
+async def pop_pending_link(
+    redis: Redis,
+    chat_id: int,
+) -> str | None:
+    value = await redis.getdel(_pending_link_key(chat_id))
+
+    if isinstance(value, bytes):
+        value = value.decode()
+
+    return value
+
+
 async def import_lecture(
     db: AsyncSession,
     url: str,
     probe: UrlProbe = probe_url,
+    allow_duplicate: bool = False,
 ) -> Lecture:
     """A lecture from a link sent to the bot; it has no owner, like seeded
     ones, so any teacher can manage it on the site."""
     return await create_imported_lecture(
         db,
         None,
-        LectureImport.model_validate({"url": url}),
+        LectureImport.model_validate(
+            {
+                "url": url,
+                "allow_duplicate": allow_duplicate,
+            }
+        ),
         probe,
     )
 

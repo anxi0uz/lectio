@@ -79,6 +79,19 @@ class Lecture(Base):
         Text,
     )
 
+    # Platform and video id ("youtube:dQw4w9WgXcQ"): every link form of the
+    # same video gives the same key, so a repeated import is caught.
+    source_key: Mapped[str | None] = mapped_column(
+        String(200),
+        index=True,
+    )
+
+    # SHA-256 of an uploaded file; catches only byte-identical copies.
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        index=True,
+    )
+
     video_path: Mapped[str | None] = mapped_column(
         Text,
     )

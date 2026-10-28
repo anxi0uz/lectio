@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -6,7 +7,7 @@ from uuid import UUID, uuid4
 import anyio
 import structlog
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lectio.core.config import get_settings
@@ -38,6 +39,7 @@ from lectio.models.enums import (
 from lectio.modules.auth.permissions import ensure_can_manage
 from lectio.modules.courses.service import get_course_by_id
 from lectio.modules.lectures.exceptions import (
+    DuplicateLectureError,
     FileTooLargeError,
     LectureBusyError,
     LectureNotFoundError,
@@ -73,6 +75,10 @@ UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 UrlProbe = Callable[[str], RemoteVideo]
 
+# First key of the two-key advisory lock: keeps duplicate checks apart from
+# any other advisory locks in the database.
+DUPLICATE_LOCK_NAMESPACE = 7301
+
 
 def media_type_for(path: Path) -> str:
     return MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
@@ -81,9 +87,11 @@ def media_type_for(path: Path) -> str:
 async def save_upload(
     upload: UploadFile,
     destination: Path,
-) -> None:
+) -> str:
+    """Write the upload to disk; returns its SHA-256, computed on the way."""
     limit = get_settings().max_upload_mb * 1024 * 1024
     written = 0
+    digest = hashlib.sha256()
 
     async with await anyio.open_file(destination, "wb") as file:
         while chunk := await upload.read(UPLOAD_CHUNK_BYTES):
@@ -94,7 +102,10 @@ async def save_upload(
                     f"File exceeds {get_settings().max_upload_mb} MB",
                 )
 
+            digest.update(chunk)
             await file.write(chunk)
+
+    return digest.hexdigest()
 
 
 def _ensure_duration_allowed(duration: float | None) -> None:
@@ -155,12 +166,53 @@ async def _ensure_can_add_to_course(
         ensure_can_manage(course.owner_id, user)
 
 
+async def find_duplicate(
+    db: AsyncSession,
+    source_key: str | None = None,
+    content_hash: str | None = None,
+) -> Lecture | None:
+    """An earlier lecture of the same video; failed attempts do not count.
+
+    Takes a transaction-level lock on the video first, held until commit:
+    a second request for the same video waits here and then sees the first
+    one's lecture, so both cannot pass the check. Other videos do not wait.
+    """
+    if source_key is not None:
+        key = source_key
+        match = Lecture.source_key == source_key
+    elif content_hash is not None:
+        key = content_hash
+        match = Lecture.content_hash == content_hash
+    else:
+        return None
+
+    await db.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                DUPLICATE_LOCK_NAMESPACE,
+                func.hashtext(key),
+            )
+        )
+    )
+
+    return await db.scalar(
+        select(Lecture)
+        .where(
+            match,
+            Lecture.status != LectureStatus.FAILED,
+        )
+        .order_by(Lecture.created_at.asc())
+        .limit(1)
+    )
+
+
 async def create_uploaded_lecture(
     db: AsyncSession,
     owner: User,
     upload: UploadFile,
     title: str | None,
     course_id: UUID | None,
+    allow_duplicate: bool = False,
 ) -> Lecture:
     filename = Path(upload.filename or "")
     suffix = filename.suffix.lower()
@@ -177,8 +229,13 @@ async def create_uploaded_lecture(
     destination = ensure_lecture_dir(lecture_id) / f"video{suffix}"
 
     try:
-        await save_upload(upload, destination)
+        content_hash = await save_upload(upload, destination)
         info = await validate_media_file(destination)
+
+        if not allow_duplicate and (
+            existing := await find_duplicate(db, content_hash=content_hash)
+        ):
+            raise DuplicateLectureError(existing)
     except BaseException:
         await asyncio.to_thread(remove_lecture_dir, lecture_id)
         raise
@@ -189,6 +246,7 @@ async def create_uploaded_lecture(
         course_id=course_id,
         title=(title or filename.stem or "Untitled lecture")[:300],
         source_type=SourceType.UPLOAD,
+        content_hash=content_hash,
         video_path=to_media_path(destination),
         video_mime_type=MEDIA_TYPES[suffix],
         duration_seconds=info.duration,
@@ -221,6 +279,11 @@ async def create_imported_lecture(
     url = str(data.url)
     remote = await validate_url(url, probe)
 
+    if not data.allow_duplicate and (
+        existing := await find_duplicate(db, source_key=remote.key)
+    ):
+        raise DuplicateLectureError(existing)
+
     lecture = Lecture(
         owner_id=owner.id if owner else None,
         course_id=data.course_id,
@@ -228,6 +291,7 @@ async def create_imported_lecture(
         duration_seconds=remote.duration,
         source_type=SourceType.URL,
         source_url=url,
+        source_key=remote.key,
         status=LectureStatus.PENDING,
         progress=0.0,
     )

@@ -7,12 +7,15 @@ from lectio.bot.service import (
     get_current_lecture,
     import_lecture,
     lecture_card,
+    pop_pending_link,
     search_messages,
     set_current_lecture,
+    set_pending_link,
     suggested_question,
 )
 from lectio.core.exceptions import DomainError
 from lectio.models.enums import LectureStatus
+from lectio.modules.lectures.exceptions import DuplicateLectureError
 from lectio.modules.summaries.generator import GeneratedSummary
 from lectio.modules.summaries.schemas import OutlineSection
 from lectio.modules.summaries.service import save_summary
@@ -103,3 +106,25 @@ async def test_import_from_link(
         await import_lecture(db, "https://youtu.be/missing", fake_url_probe)
 
     assert error.value.code == "url_unavailable"
+
+
+async def test_repeated_link_offers_the_existing_lecture(
+    db: AsyncSession,
+    test_redis: Redis,
+) -> None:
+    url = "https://www.youtube.com/watch?v=same"
+    first = await import_lecture(db, url, fake_url_probe)
+
+    with pytest.raises(DuplicateLectureError) as error:
+        await import_lecture(db, f"{url}&t=30", fake_url_probe)
+
+    again = await import_lecture(db, url, fake_url_probe, allow_duplicate=True)
+
+    assert error.value.lecture_id == first.id
+    assert again.id != first.id
+
+    await set_pending_link(test_redis, 42, url)
+
+    assert await pop_pending_link(test_redis, 42) == url
+    # One press of "add anyway" per link.
+    assert await pop_pending_link(test_redis, 42) is None

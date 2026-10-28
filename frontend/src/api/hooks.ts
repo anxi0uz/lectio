@@ -250,7 +250,7 @@ export function useImportLecture() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: { url: string; title?: string; course_id?: string }) =>
+    mutationFn: (body: { url: string; title?: string; course_id?: string; allow_duplicate?: boolean }) =>
       api<Lecture>('/lectures/import', { method: 'POST', body }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['lectures'] }),
   });
