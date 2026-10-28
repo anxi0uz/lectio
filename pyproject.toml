@@ -5,6 +5,7 @@ description = "Semantic search, transcripts and summaries for video lectures"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "aiogram>=3.22",
     "alembic>=1.18.5",
     "fastapi[standard]>=0.162.0",
     "faster-whisper>=1.2.1",

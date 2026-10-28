@@ -106,6 +106,19 @@ bookmarks, search_queries, lecture_likes, comments, quiz_attempts`;
 старые файлы (локальная копия удаляется только после успешной загрузки).
 Клиент — пакет `minio` (синхронный, вызовы в `asyncio.to_thread`).
 
+## Telegram-бот (`lectio/bot`)
+
+Отдельный процесс `python -m lectio.bot` (aiogram, long polling), без HTTP
+к API: вызывает те же сервисы напрямую (импорт, поиск, `answer_question`,
+`get_summary`). Логика — в `bot/service.py` (тестируется на настоящей БД),
+оформление в Telegram HTML — `bot/formatting.py`, обработчики тонкие.
+Лекции из бота без владельца (как из `lectio seed`). Текущая лекция чата —
+Redis `bot:chat:<id>:lecture`. После импорта фоновая задача раз в 5 с
+обновляет сообщение со статусом и присылает карточку, когда `ready`; при
+перезапуске бота наблюдение теряется (лекция всё равно обработается).
+Telegram может отвергнуть ссылки (например, на localhost) — тогда
+сообщение уходит без ссылок. Бот грузит BGE-M3 на CPU (~2 ГБ RAM).
+
 ## Геймификация (`modules/gamification`)
 
 Своих таблиц нет: `collect_activity` считает по пользователям просмотры,
@@ -153,6 +166,7 @@ uv run alembic upgrade head
 uv run uvicorn lectio.main:app --reload      # API
 uv run python -m lectio.worker               # воркер (держать запущенным!)
 npm --prefix frontend run dev                # фронт :5173
+uv run python -m lectio.bot                  # Telegram-бот (нужен TELEGRAM_BOT_TOKEN)
 ```
 
 В приложении Claude то же самое запускается через `.claude/launch.json`

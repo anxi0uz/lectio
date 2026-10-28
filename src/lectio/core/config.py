@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     # with a long context window.
     llm_part_chars: int = 9000
 
+    # The Telegram bot (python -m lectio.bot) runs only when a token is set.
+    telegram_bot_token: str | None = None
+    # Where links in bot messages lead: the web app as users open it.
+    public_web_url: str = "http://localhost:5173"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
