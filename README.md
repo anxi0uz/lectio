@@ -14,6 +14,8 @@
 [статья на dev.to](https://dev.to/anxi0uz/kak-ia-vpikhival-tri-modieli-v-6-gb-vidieopamiati-3c6p)
 ([English](https://dev.to/anxi0uz/how-i-squeezed-three-models-into-6-gb-of-vram-3504)).
 
+https://github.com/user-attachments/assets/06fe8e47-60de-4c47-900a-ba9401cc78dd
+
 ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
