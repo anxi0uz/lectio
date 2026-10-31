@@ -178,6 +178,10 @@ API держит свой экземпляр BGE-M3 для запросов; `SE
 `OLLAMA_FLASH_ATTENTION=1` и `OLLAMA_KV_CACHE_TYPE=q8_0` — кеш контекста
 занимает вдвое меньше.
 
+Почему всё устроено именно так и на какие грабли я наступил — в статье:
+[на русском](https://dev.to/anxi0uz/kak-ia-vpikhival-tri-modieli-v-6-gb-vidieopamiati-3c6p)
+и [на английском](https://dev.to/anxi0uz/how-i-squeezed-three-models-into-6-gb-of-vram-3504).
+
 ### macOS на Apple Silicon
 
 ```env
