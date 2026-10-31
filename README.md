@@ -9,6 +9,11 @@
 Пифагора» — получаете фрагменты с таймкодами, даже если таких слов в лекции
 не было.
 
+Работает целиком локально на GTX 1660 Super с 6 ГБ видеопамяти. Как туда
+поместились Whisper, BGE-M3 и Qwen3 —
+[статья на dev.to](https://dev.to/anxi0uz/kak-ia-vpikhival-tri-modieli-v-6-gb-vidieopamiati-3c6p)
+([English](https://dev.to/anxi0uz/how-i-squeezed-three-models-into-6-gb-of-vram-3504)).
+
 ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)
